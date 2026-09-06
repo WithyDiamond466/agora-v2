@@ -25,6 +25,11 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Keep redirected console output readable on Windows as well as Unix.
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8")
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 

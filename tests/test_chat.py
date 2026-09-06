@@ -785,7 +785,7 @@ def test_start_grading_refuses_empty_assignment(db, course):
 
 
 def test_chat_grading_confirmation_only_opens_privacy_gated_queue():
-    source = Path("static/js/chat.js").read_text()
+    source = Path("static/js/chat.js").read_text(encoding="utf-8")
     start = source.index("Chat.prototype.confirmCard")
     handler = source[start : source.index("/* ---- panel wiring", start)]
 

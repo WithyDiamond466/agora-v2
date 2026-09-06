@@ -13,7 +13,7 @@ It uses a throw-away data directory (nothing in data/ is touched), seeds the
 demo course, accepts the terms, grades N demo submissions with the chosen
 provider, exercises the review + release + CSV export path, optionally runs
 the model comparison, and prints what came back. Exit code is non-zero if any
-step fails. Expect to spend well under a dollar for the defaults.
+step fails. Actual cost depends on the selected model, input, and provider pricing.
 """
 
 from __future__ import annotations
@@ -27,6 +27,11 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+
+# Keep redirected console output readable on Windows as well as Unix.
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8")
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
