@@ -26,3 +26,9 @@ jobs:
       - run: python -m pytest -m "not local_llm"
       - run: python scripts/render_smoke.py
       - run: python scripts/live_smoke.py --provider mock --compare
+      - name: Check Windows launcher
+        if: runner.os == 'Windows'
+        run: .\start-agora.bat --demo --seed-only
+      - name: Check macOS and Linux launcher
+        if: runner.os != 'Windows'
+        run: bash start-agora.sh --demo --seed-only
