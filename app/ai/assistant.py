@@ -514,7 +514,7 @@ def build_provider(
 
     Returns ``(provider, provider_name, model)``.
     """
-    name = provider_name or config.DEFAULT_PROVIDER
+    name = provider_name or configured_provider_name()
     chosen_model = model or chat_model_for(name)
     mod = _providers_module()
 

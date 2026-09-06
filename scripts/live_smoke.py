@@ -45,7 +45,12 @@ def main() -> int:
     parser.add_argument("--mode", default="grade", help="skill mode: grade | feedback | selective")
     parser.add_argument("--compare", action="store_true", help="also run the model comparison on one submission")
     parser.add_argument("--keep", action="store_true", help="keep the temp data dir and print its path")
+    parser.add_argument("--sample-essay", type=Path, help="synthetic PDF to grade instead of the demo placeholder")
+    parser.add_argument("--local-base-url", help="loopback OpenAI-compatible endpoint for this test only")
+    parser.add_argument("--max-tokens", type=int, default=4000, help="output limit for the test Skill")
     args = parser.parse_args()
+    if args.count < 1 or args.max_tokens < 256:
+        parser.error("count must be positive and max-tokens must be at least 256")
 
     tmp = Path(tempfile.mkdtemp(prefix="agora-live-"))
     os.environ["AGORA_DATA_DIR"] = str(tmp / "data")
@@ -61,6 +66,10 @@ def main() -> int:
     from app.seed import seed_demo
 
     init_db()
+    if args.local_base_url:
+        config.save_privacy_settings({"local_model": {"enabled": True, "base_url": args.local_base_url, "model": args.model or config.LOCAL_DEFAULT_MODEL}})
+    if args.provider != "auto":
+        config.set_preferred_provider(args.provider)
     with session_scope() as db:
         seed_demo(db)
     client = TestClient(app)
@@ -90,7 +99,7 @@ def main() -> int:
     step("skill + assignment")
     skills = ok(client.get("/api/skills"))
     skill = skills[0]
-    patch = {"provider": args.provider, "mode": args.mode}
+    patch = {"provider": args.provider, "mode": args.mode, "max_tokens": args.max_tokens}
     if args.model:
         patch["model"] = args.model
     skill = ok(client.patch(f"/api/skills/{skill['id']}", json=patch))
@@ -106,6 +115,18 @@ def main() -> int:
         print(f"   selective: AI grades {keys}")
     subs = ok(client.get(f"/api/assignments/{assignment['id']}/submissions"))[: args.count]
     ids = [s["id"] for s in subs]
+    if args.sample_essay:
+        from app.models import Submission
+        raw = args.sample_essay.read_bytes()
+        if not raw.startswith(b"%PDF"):
+            parser.error("sample-essay must be a PDF containing synthetic coursework")
+        with session_scope() as db:
+            for submission_id in ids:
+                submission = db.get(Submission, submission_id)
+                target = Path(submission.file_path).resolve()
+                assert tmp.resolve() in target.parents
+                target.write_bytes(raw)
+        print(f"   synthetic sample: {args.sample_essay.name}")
     print(f"   assignment {assignment['name']!r}: regrading {ids}")
 
     step(f"grading with {args.provider} (force regrade of {len(ids)})")
@@ -166,6 +187,8 @@ def main() -> int:
     chat = ok(client.post("/api/chat", json={"message": "Which students are struggling most in this course?", "context": {"course_id": course_id}}))
     print(f"   {chat.get('provider', '?')} · {chat.get('model', '?')}: {(chat.get('reply') or '')[:200]!r}")
 
+    if args.provider != "auto":
+        assert chat.get("provider") == args.provider, "Chat used an unexpected provider or mock fallback"
     assert chat.get("reply") and "Open a course before" not in chat["reply"], "Chat did not use course context"
     print("\nOK" + (f" — data kept at {tmp}" if args.keep else ""))
     if not args.keep:

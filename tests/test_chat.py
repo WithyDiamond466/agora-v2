@@ -1444,3 +1444,17 @@ def test_tool_get_course_summary_query_count_is_constant(db):
     assert len(grouped_status_queries(one_selects)) == 1
     assert len(grouped_status_queries(four_selects)) == 1
     assert len(one_selects) == len(four_selects)
+
+
+def test_chat_uses_configured_provider_preference(db, monkeypatch):
+    monkeypatch.setattr(A, 'configured_provider_name', lambda: 'local')
+    captured = []
+    sentinel = object()
+    def build(mod, name, model, session):
+        captured.append(name)
+        return sentinel
+    monkeypatch.setattr(A, '_live_provider', build)
+    provider, name, model = A.build_provider(db)
+    assert name == 'local'
+    assert captured == ['local']
+    assert provider is sentinel
