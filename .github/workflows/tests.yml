@@ -10,8 +10,8 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     env:
-      AGORA_DATA_DIR: ${{ runner.temp }}/agora-ci/data
-      AGORA_CONFIG_DIR: ${{ runner.temp }}/agora-ci/config
+      AGORA_DATA_DIR: ${{ github.workspace }}/.agora-ci/data
+      AGORA_CONFIG_DIR: ${{ github.workspace }}/.agora-ci/config
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
