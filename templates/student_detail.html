@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{#
+  Student detail. Context (app.routers.courses.page_student_detail):
+    student   : Student
+    course    : Course
+    results   : [GradeResult]  (with .submission.assignment loaded)
+    analytics : app.analytics.student_timeline() dict
+  Charts fetch their own JSON (see data-src below) so the page still reads
+  fully without JavaScript.
+#}
+{% set analytics = analytics | default({}, true) %}
+{% set results = results | default([], true) %}
+{% set weak = analytics.criteria | default([], true) %}
+{% set tags = analytics.misconceptions | default([], true) %}
+{% set avg = analytics.average_percent | default(none) %}
+{% set gpat = grading_href | default("/grading/{id}", true) %}
+{% block title %}{{ student.name }} — Agora{% endblock %}
+
+{% block main %}
+<header class="page-head">
+  <div>
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <a href="/">Courses</a> /
+      {% if course %}<a href="/courses/{{ course.id }}">{{ course.name }}</a> / {% endif %}
+      {{ student.name }}
+    </nav>
+    <h1>{{ student.name }} <span class="snum">#{{ "%02d" | format(student.student_number) }}</span></h1>
+    <p class="page-sub">
+      {{ student.email or "No email on file" }}
+      · the model only ever sees <span class="snum">#{{ "%02d" | format(student.student_number) }}</span>
+    </p>
+  </div>
+  <div class="page-actions">
+    {% if course %}<a class="btn" href="/courses/{{ course.id }}/analytics">Course analytics</a>{% endif %}
+  </div>
+</header>
+
+{#
+  Student Insight card (Increment 1, Feature A). The card, its evidence links
+  and the observation feed are fetched by static/js/insight.js from the insight
+  router — this page's server context is unchanged, so the card degrades to an
+  empty state if that router is not mounted.
+#}
+<section class="card student-card" id="student-card"
+         aria-label="What Agora knows about this student"
+         data-student-id="{{ student.id }}"
+         data-api-card="{{ (insight_api.card if insight_api is defined and insight_api else none) | default('/api/students/' ~ student.id ~ '/card', true) }}"
+         data-api-refresh="{{ (insight_api.refresh if insight_api is defined and insight_api else none) | default('/api/students/' ~ student.id ~ '/card/refresh', true) }}"
+         data-api-observations="{{ (insight_api.observations if insight_api is defined and insight_api else none) | default('/api/students/' ~ student.id ~ '/observations', true) }}">
+  <div class="card-head">
+    <div>
+      <h2>Where {{ student.name.split(",")[-1].strip().split(" ")[0] if student.name else "this student" }} stands</h2>
+      <span class="fine" data-card-meta></span>
+    </div>
+    <button class="btn btn--sm" type="button" data-action="refresh-card">Refresh card</button>
+  </div>
+  <p class="form-error" data-card-error hidden></p>
+  <div data-card-body>
+    <p class="fine">Reading this student's graded record…</p>
+  </div>
+</section>
+
+<section class="stat-row" aria-label="Student stats">
+  <div class="stat-tile">
+    <div class="stat-label">Course average</div>
+    <div class="stat-value">{% if avg is not none %}{{ avg }}%{% else %}—{% endif %}</div>
+    <div class="stat-delta flat" data-class-delta
+         {% if course %}data-src="/api/courses/{{ course.id }}/analytics/overview"{% endif %}
+         data-student-average="{{ avg if avg is not none else '' }}">vs class average</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Assignments graded</div>
+    <div class="stat-value">{{ analytics.graded_count | default(results | length, true) }}</div>
+    <div class="stat-delta flat">
+      best {% if analytics.best_percent is not none and analytics.best_percent is defined %}{{ analytics.best_percent }}%{% else %}—{% endif %}
+      · lowest {% if analytics.worst_percent is not none and analytics.worst_percent is defined %}{{ analytics.worst_percent }}%{% else %}—{% endif %}
+    </div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Recurring misconceptions</div>
+    <div class="stat-value">{{ tags | length }}</div>
+    <div class="stat-delta flat">
+      {% if tags %}most often “{{ tags[0].tag }}”{% else %}nothing tagged yet{% endif %}
+    </div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Lowest criterion</div>
+    <div class="stat-value stat-value--phrase">
+      {% if weak %}{{ weak[0].title }}{% else %}—{% endif %}
+    </div>
+    <div class="stat-delta flat">
+      {% if weak %}{{ weak[0].average_percent }}% of the points available{% else %}no weak spots yet{% endif %}
+    </div>
+  </div>
+</section>
+
+<div class="grid grid--7-5">
+
+  <div class="col-stack">
+  <section class="card card--flush" aria-label="Results">
+    <div class="card-head">
+      <h2>Results</h2>
+      <span class="fine">{{ results | length }} graded submission{{ "" if results | length == 1 else "s" }}</span>
+    </div>
+    {% if results %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Assignment</th>
+          <th scope="col">Graded</th>
+          <th scope="col" class="num">Score</th>
+          <th scope="col" class="num">Percent</th>
+          <th scope="col">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in results %}
+          {% set a = r.submission.assignment %}
+          <tr>
+            <td><a class="row-link" href="{{ gpat.replace('{id}', a.id | string) }}?submission={{ r.submission_id }}">{{ a.name }}</a></td>
+            <td>{{ r.created_at.strftime("%b %d") if r.created_at else "—" }}</td>
+            <td class="num">{{ r.overall_score | round(1) }}<span class="max">/{{ r.max_score | round(0) | int }}</span></td>
+            <td class="num">{{ (r.percentage|string ~ "%") if r.percentage is not none else ("Incomplete" if r.incomplete else "Feedback only") }}</td>
+            <td><span class="pill pill--graded">graded</span></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">
+      <h3>Nothing graded yet</h3>
+      <p>Once this student's work is graded, every score, criterion and tag lands here.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="card" id="observations" aria-label="Observations">
+    <div class="card-head">
+      <h3>Observations</h3>
+      <span class="fine">One plain fact per graded criterion, tag and strength — the card is built from these.</span>
+    </div>
+    <div id="observation-feed">
+      <p class="fine">Loading the record…</p>
+    </div>
+  </section>
+  </div>
+
+  <div>
+    <section class="card chart-card" aria-label="Score trend">
+      <div class="chart-head"><h3>Scores over time</h3></div>
+      <p class="chart-sub">Percent score per assignment, against the class average</p>
+      <div class="chart-mount" data-chart="student-trend"
+           data-src="/api/students/{{ student.id }}/analytics/timeline"
+           {% if course %}data-class-src="/api/courses/{{ course.id }}/analytics/overview"{% endif %}
+           data-student-label="{{ student.name }}">
+        <p class="chart-fallback">
+          {% if analytics.timeline %}
+            {% for p in analytics.timeline %}{{ p.name }} {{ p.percent }}%{{ "; " if not loop.last }}{% endfor %}
+          {% else %}No graded work yet.{% endif %}
+        </p>
+      </div>
+    </section>
+
+
+    <section class="card" aria-label="Recurring misconceptions">
+      <div class="card-head"><h3>Recurring misconceptions</h3></div>
+      {% if tags %}
+        <p class="tag-list">
+          {% for t in tags %}
+            <span class="tag">{{ t.tag }}<span class="tag-count">{{ t.count }}</span></span>
+          {% endfor %}
+        </p>
+      {% else %}
+        <p class="fine">No misconception tags recorded for this student.</p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+
+
+{# insight.js turns evidence ids into links to the graded submission. #}
+<script type="application/json" id="student-context">
+{"grading_href": {{ gpat | tojson }},
+ "submissions": [{% for r in results %}{"id": {{ r.submission_id }}, "assignment_id": {{ r.submission.assignment.id }}, "assignment_name": {{ r.submission.assignment.name | tojson }}}{{ "," if not loop.last }}{% endfor %}]}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/charts.js" defer></script>
+<script src="/static/js/insight.js" defer></script>
+{% endblock %}

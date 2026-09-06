@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{#
+  Skills index. Context (app.routers.skills page route):
+    skills : [Skill]  (dicts work too — each needs name, description, provider,
+             model; optional knowledge_docs / doc_count / course_count)
+  Optional: api.create ("/api/skills"), api.import ("/api/skills/import")
+#}
+{% set skills = skills | default([], true) %}
+{% set api = api | default({}, true) %}
+{% set url_create = api.create | default("/api/skills", true) %}
+{% set url_import = api['import'] | default("/api/skills/import", true) %}
+{% block title %}Skills — Agora{% endblock %}
+
+{% block main %}
+<header class="page-head">
+  <div>
+    <h1>Skills</h1>
+    <p class="page-sub">A skill is a grading voice, a set of standards, and the course
+      materials to grade against. Export one and a colleague can grade the way you do.</p>
+  </div>
+  <div class="page-actions">
+    <button class="btn" type="button" data-panel-toggle="import-skill-panel">Import bundle</button>
+    <button class="btn btn--primary" type="button" data-panel-toggle="new-skill-panel">+ New skill</button>
+  </div>
+</header>
+
+<section class="card panel" id="new-skill-panel" hidden aria-label="New skill">
+  <div class="card-head"><h3>New skill</h3></div>
+  <form data-api="{{ url_create }}" data-method="POST" data-after="redirect:/skills/{id}">
+    <div class="field">
+      <label for="ns-name">Name</label>
+      <input id="ns-name" name="name" type="text" required placeholder="Diff-Eq Grader v4">
+    </div>
+    <div class="field">
+      <label for="ns-desc">Description</label>
+      <textarea id="ns-desc" name="description" rows="2"
+                placeholder="What this skill grades, and how strictly."></textarea>
+    </div>
+    <p class="form-error" data-form-error hidden></p>
+    <div class="form-foot">
+      <button class="btn" type="button" data-panel-toggle="new-skill-panel">Cancel</button>
+      <button class="btn btn--primary" type="submit">Create skill</button>
+    </div>
+  </form>
+</section>
+
+<section class="card panel" id="import-skill-panel" hidden aria-label="Import a skill bundle">
+  <div class="card-head"><h3>Import a skill bundle</h3></div>
+  <form data-api="{{ url_import }}" data-method="POST" data-encoding="multipart" data-after="reload">
+    <div class="field">
+      <label for="is-file">Bundle</label>
+      <input id="is-file" name="file" type="file" accept=".agoraskill,.zip" required>
+      <p class="hint">An <code>.agoraskill</code> file: the system prompt, its settings, and every knowledge document.</p>
+    </div>
+    <p class="form-error" data-form-error hidden></p>
+    <div class="form-foot">
+      <button class="btn" type="button" data-panel-toggle="import-skill-panel">Cancel</button>
+      <button class="btn btn--primary" type="submit">Import</button>
+    </div>
+  </form>
+</section>
+
+{% if skills %}
+<div class="grid grid--auto">
+  {% for s in skills %}
+    {% set docs = s.knowledge_docs | default([], true) %}
+    <section class="card skill-card">
+      <h3><a class="row-link" href="/skills/{{ s.id }}">{{ s.name }}</a></h3>
+      <p class="skill-desc">{{ s.description or "No description yet." }}</p>
+      {% set mode_id = s.mode | default("grade", true) %}
+      <p><span class="model-badge">{{ (modes[mode_id].label if modes is defined and mode_id in modes else mode_id) }} · {{ "automatic" if (s.provider | default("auto", true)) == "auto" else (s.provider ~ " · " ~ s.model) }}</span></p>
+      <p class="skill-voice">{{ (s.system_prompt or "")
+        .replace("\n", " ") | trim | truncate(150, true, "…") }}</p>
+      <div class="counts">
+        <span><strong>{{ s.doc_count | default(docs | length, true) }}</strong> knowledge docs</span>
+        {% if s.course_count is defined %}
+          <span><strong>{{ s.course_count }}</strong> courses</span>
+        {% endif %}
+      </div>
+      <div class="skill-foot">
+        <a class="btn btn--quiet btn--sm" href="/skills/{{ s.id }}">Edit</a>
+        <a class="btn btn--quiet btn--sm" href="{{ (api.export | default('/api/skills/{id}/export', true)).replace('{id}', s.id | string) }}">Export</a>
+        <a class="btn btn--quiet btn--sm" href="/skills/{{ s.id }}#test-drive">Test drive</a>
+      </div>
+    </section>
+  {% endfor %}
+  <button class="card card--new" type="button" data-panel-toggle="new-skill-panel">
+    <span class="card--new-plus">+</span>
+    <span class="card--new-label">New skill</span>
+    <span class="fine">A grading voice, a rubric, and the course materials it grades against.</span>
+  </button>
+</div>
+<section class="card" aria-label="What a skill bundle contains">
+  <div class="card-head">
+    <h2>What travels in a bundle</h2>
+    <span class="fine">{{ bundle_suffix | default(".agoraskill", true) }}</span>
+  </div>
+  <div class="grid grid--3">
+    <div>
+      <h3>The voice</h3>
+      <p class="fine">The system prompt, the provider, the model, and the output
+        cap — everything that decides how the grade is written.</p>
+    </div>
+    <div>
+      <h3>The standards</h3>
+      <p class="fine">The rubric the skill grades against, criterion by
+        criterion, with the points each one carries.</p>
+    </div>
+    <div>
+      <h3>The materials</h3>
+      <p class="fine">Every knowledge document attached to the skill — syllabi,
+        rubric conventions, worked examples — sent natively, no OCR.</p>
+    </div>
+  </div>
+  <p class="fine">No student names, no submissions, and no API keys are ever
+    written into a bundle. A colleague who imports one grades the way you do
+    without seeing anyone in your class.</p>
+</section>
+{% else %}
+<div class="card empty">
+  <h3>No skills yet</h3>
+  <p>A skill is three things: the voice you grade in, the standards you hold, and the
+    materials — syllabus, rubric conventions, worked examples — you grade against.</p>
+  <button class="btn btn--primary" type="button" data-panel-toggle="new-skill-panel">+ New skill</button>
+</div>
+{% endif %}
+{% endblock %}

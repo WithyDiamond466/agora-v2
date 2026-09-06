@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{#
+  Course analytics dashboard. Context (app.routers.analytics.page_analytics):
+    course      : Course
+    assignments : [Assignment]
+    students    : [Student]
+    api         : {overview, criteria, misconceptions, timeline}
+  Every chart is hand-rolled SVG rendered by static/js/charts.js from the JSON
+  endpoints above; each ships a data-table twin, so no value is hover-gated.
+#}
+{% set assignments = assignments | default([], true) %}
+{% set api = api | default({}, true) %}
+{% set url_overview = api.overview | default("/api/courses/" ~ course.id ~ "/analytics/overview", true) %}
+{% set url_criteria = api.criteria | default("/api/courses/" ~ course.id ~ "/analytics/criteria", true) %}
+{% set url_misconceptions = api.misconceptions | default("/api/courses/" ~ course.id ~ "/analytics/misconceptions", true) %}
+{% block title %}Analytics — {{ course.name }} — Agora{% endblock %}
+
+{% block main %}
+<header class="page-head">
+  <div>
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <a href="/">Courses</a> / <a href="/courses/{{ course.id }}">{{ course.name }}</a> / Analytics
+    </nav>
+    <h1>Where {{ course.name }} stands</h1>
+  </div>
+  <div class="page-actions">
+    <button class="btn" type="button" data-action="print">Export report</button>
+  </div>
+</header>
+
+<div class="filter-row" role="group" aria-label="Filters" id="analytics-filters">
+  {% if courses is defined and courses %}
+    <label for="f-course">Course</label>
+    <select id="f-course" data-filter="course">
+      {% for c in courses %}
+        <option value="{{ c.id }}" {{ "selected" if c.id == course.id }}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+  {% endif %}
+  <label for="f-assignment">Assignments</label>
+  <select id="f-assignment" data-filter="assignment">
+    <option value="">All graded work</option>
+    {% for a in assignments %}
+      <option value="{{ a.id }}">{{ a.name }}</option>
+    {% endfor %}
+  </select>
+  <span class="fine" data-filter-note></span>
+</div>
+
+<section class="stat-row" aria-label="Course stats">
+  <div class="stat-tile">
+    <div class="stat-label">Class average</div>
+    <div class="stat-value" data-stat="average">—</div>
+    <div class="stat-delta flat" data-stat="average-note">percent of points earned</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Graded submissions</div>
+    <div class="stat-value" data-stat="graded">—</div>
+    <div class="stat-delta flat" data-stat="graded-note">of those collected</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Scores below 70%</div>
+    <div class="stat-value" data-stat="below">—</div>
+    <div class="stat-delta flat" data-stat="below-note">graded submissions</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Top misconception</div>
+    <div class="stat-value stat-value--phrase" data-stat="misconception">—</div>
+    <div class="stat-delta flat" data-stat="misconception-note">across the course</div>
+  </div>
+</section>
+
+<div class="grid grid--2" id="analytics-charts">
+
+  <section class="card chart-card" aria-label="Score distribution">
+    <div class="chart-head"><h3 data-chart-title="distribution">Score distribution</h3></div>
+    <p class="chart-sub" data-chart-sub="distribution">Graded submissions, binned by percent score</p>
+    <div class="chart-mount" data-chart="distribution" data-src="{{ url_overview }}">
+      <p class="chart-fallback">Score distribution loads from
+        <code>{{ url_overview }}</code>.</p>
+    </div>
+  </section>
+
+  <section class="card chart-card" aria-label="Average score by criterion">
+    <div class="chart-head"><h3>Average score by criterion</h3></div>
+    <p class="chart-sub" data-chart-sub="criteria">Percent of the points available, weakest first</p>
+    <div class="chart-mount" data-chart="criteria" data-src="{{ url_criteria }}">
+      <p class="chart-fallback">Criterion averages load from
+        <code>{{ url_criteria }}</code>.</p>
+    </div>
+  </section>
+
+  <section class="card chart-card" aria-label="Most common misconceptions">
+    <div class="chart-head"><h3>Most common misconceptions</h3></div>
+    <p class="chart-sub">Graded submissions carrying each tag</p>
+    <div class="chart-mount" data-chart="misconceptions" data-src="{{ url_misconceptions }}" data-limit="7">
+      <p class="chart-fallback">Misconception tags load from
+        <code>{{ url_misconceptions }}</code>.</p>
+    </div>
+  </section>
+
+  <section class="card chart-card" aria-label="Class average over assignments">
+    <div class="chart-head"><h3>Class average over assignments</h3></div>
+    <p class="chart-sub">Percent score; the shaded band is the lowest-to-highest spread</p>
+    <div class="chart-mount" data-chart="trend" data-src="{{ url_overview }}">
+      <p class="chart-fallback">The trend line loads from
+        <code>{{ url_overview }}</code>.</p>
+    </div>
+  </section>
+</div>
+
+<noscript>
+  <p class="fine">Charts need JavaScript. The same numbers are available as JSON at
+    <code>{{ url_overview }}</code>, <code>{{ url_criteria }}</code> and
+    <code>{{ url_misconceptions }}</code>.</p>
+</noscript>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/charts.js" defer></script>
+{% endblock %}

@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{#
+  Course detail. Context (app.routers.courses.page_course_detail):
+    course      : Course
+    students    : [Student]
+    assignments : [Assignment]  (with .submissions loaded)
+  Optional overrides:
+    grading_href     — pattern for the grading page, "{id}" is the assignment id
+    assignments_api  — POST endpoint for creating an assignment
+#}
+{% set gpat = grading_href | default("/grading/{id}", true) %}
+{% set show_all = (request.query_params.get("roster") == "all") if request is defined else false %}
+{% set roster_limit = students | length if show_all else 12 %}
+{% block title %}{{ course.name }} — Agora{% endblock %}
+
+{% block main %}
+<header class="page-head">
+  <div>
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Courses</a> / {{ course.name }}</nav>
+    <h1>{{ course.name }}</h1>
+    <p class="page-sub">
+      {{ course.term or "No term set" }} · {{ students | length }} student{{ "" if students | length == 1 else "s" }}
+      · {{ assignments | length }} assignment{{ "" if assignments | length == 1 else "s" }}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="/courses/{{ course.id }}/analytics">View analytics</a>
+    <button class="btn btn--primary" type="button" data-panel-toggle="new-assignment-panel">+ New assignment</button>
+  </div>
+</header>
+
+<section class="card panel" id="new-assignment-panel" hidden aria-label="New assignment">
+  <div class="card-head"><h3>New assignment</h3></div>
+  <form data-api="{{ assignments_api | default('/api/courses/' ~ course.id ~ '/assignments', true) }}"
+        data-method="POST" data-after="reload">
+    <div class="field">
+      <label for="na-name">Name</label>
+      <input id="na-name" name="name" type="text" required placeholder="Problem Set 3">
+    </div>
+    <div class="field">
+      <label for="na-desc">Description</label>
+      <textarea id="na-desc" name="description" rows="2"></textarea>
+    </div>
+    <div class="field">
+      <label for="na-due">Due date</label>
+      <input id="na-due" name="due_date" type="date">
+    </div>
+    <p class="form-error" data-form-error hidden></p>
+    <div class="form-foot">
+      <button class="btn" type="button" data-panel-toggle="new-assignment-panel">Cancel</button>
+      <button class="btn btn--primary" type="submit">Create assignment</button>
+    </div>
+  </form>
+</section>
+
+<section class="card panel" id="add-student-panel" hidden aria-label="Add student">
+  <div class="card-head"><h3>Add a student</h3></div>
+  <form data-api="/api/courses/{{ course.id }}/students" data-method="POST" data-after="reload">
+    <div class="field">
+      <label for="as-name">Name</label>
+      <input id="as-name" name="name" type="text" required placeholder="Chen, Amara">
+    </div>
+    <div class="field">
+      <label for="as-email">Email</label>
+      <input id="as-email" name="email" type="email">
+      <p class="hint">Optional. Names and emails never leave this machine — the model only sees the student number.</p>
+    </div>
+    <p class="form-error" data-form-error hidden></p>
+    <div class="form-foot">
+      <button class="btn" type="button" data-panel-toggle="add-student-panel">Cancel</button>
+      <button class="btn btn--primary" type="submit">Add student</button>
+    </div>
+  </form>
+</section>
+
+<section class="card panel" id="roster-import-panel" hidden aria-label="Import roster CSV">
+  <div class="card-head"><h3>Import roster CSV</h3></div>
+  <form data-api="/api/courses/{{ course.id }}/roster/import" data-method="POST"
+        data-encoding="multipart" data-after="reload">
+    <div class="field">
+      <label class="dropzone" for="ri-file">
+        Drop a roster CSV, or <strong>browse</strong>
+        <span class="fine">Columns: <code>name</code> (required), <code>email</code>, <code>student number</code>. Existing students are matched by name, never duplicated.</span>
+      </label>
+      <input id="ri-file" name="file" type="file" accept=".csv,text/csv" required class="visually-hidden">
+      <p class="hint" data-file-name hidden></p>
+    </div>
+    <p class="form-error" data-form-error hidden></p>
+    <div class="form-foot">
+      <button class="btn" type="button" data-panel-toggle="roster-import-panel">Cancel</button>
+      <button class="btn btn--primary" type="submit">Import</button>
+    </div>
+  </form>
+</section>
+
+<div class="grid grid--5-7">
+
+  <section class="card card--flush" aria-label="Roster">
+    <div class="card-head">
+      <h2>Roster</h2>
+      <span class="fine">{{ students | length }} students</span>
+      <span>
+        <button class="btn btn--sm" type="button" data-panel-toggle="roster-import-panel">Import CSV</button>
+        <button class="btn btn--quiet btn--sm" type="button" data-panel-toggle="add-student-panel">+ Add student</button>
+      </span>
+    </div>
+    {% if students %}
+    <table class="table table--dense">
+      <thead>
+        <tr>
+          <th scope="col">Student</th>
+          <th scope="col">Number</th>
+          <th scope="col" class="num">Avg</th>
+          <th scope="col"><span class="visually-hidden">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in students[:roster_limit] %}
+          {% set sns = namespace(total=0.0, n=0) %}
+          {% for sub in s.submissions %}{% if sub.grade_result and sub.grade_result.percentage is not none %}
+            {% set sns.total = sns.total + sub.grade_result.percentage %}
+            {% set sns.n = sns.n + 1 %}
+          {% endif %}{% endfor %}
+          <tr>
+            <td><a class="row-link" href="/students/{{ s.id }}">{{ s.name }}</a></td>
+            <td><span class="snum">#{{ "%02d" | format(s.student_number) }}</span></td>
+            <td class="num">{% if sns.n %}{{ (sns.total / sns.n) | round(1) }}{% else %}—{% endif %}</td>
+            <td><a class="btn btn--quiet btn--sm" href="/students/{{ s.id }}">Open</a></td>
+          </tr>
+        {% endfor %}
+        {% if students | length > roster_limit %}
+          <tr><td colspan="4" class="cell-center">
+            <a href="?roster=all">Show all {{ students | length }} →</a>
+          </td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">
+      <h3>No students yet</h3>
+      <p>Import a roster CSV and Agora assigns each student a number for anonymized grading.</p>
+      <button class="btn btn--primary" type="button" data-panel-toggle="roster-import-panel">Import CSV</button>
+    </div>
+    {% endif %}
+  </section>
+
+  <div class="stack">
+  <section class="card card--flush" aria-label="Assignments">
+    <div class="card-head">
+      <h2>Assignments</h2>
+      <span class="fine">{{ assignments | length }} assignments</span>
+    </div>
+    {% if assignments %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th scope="col">Assignment</th>
+          <th scope="col">Due</th>
+          <th scope="col" class="num">Submissions</th>
+          <th scope="col">Status</th>
+          <th scope="col" class="num">Avg</th>
+          <th scope="col"><span class="visually-hidden">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in assignments %}
+          {% set ans = namespace(subs=0, graded=0, failed=0, total=0.0, scored=0) %}
+          {% for sub in a.submissions %}
+            {% set ans.subs = ans.subs + 1 %}
+            {% if sub.status == "failed" %}{% set ans.failed = ans.failed + 1 %}{% endif %}
+            {% if sub.grade_result %}
+              {% set ans.graded = ans.graded + 1 %}
+              {% if sub.grade_result.percentage is not none %}
+              {% set ans.total = ans.total + sub.grade_result.percentage %}
+              {% set ans.scored = ans.scored + 1 %}
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+          {% set href = gpat.replace("{id}", a.id | string) %}
+          <tr>
+            <td><a class="row-link" href="{{ href }}">{{ a.name }}</a></td>
+            <td style="white-space: nowrap">{{ a.due_date.strftime("%b %d") if a.due_date else "—" }}</td>
+            <td class="num">{{ ans.graded }} / {{ ans.subs }}</td>
+            <td>
+              {% if ans.failed %}
+                <span class="pill pill--failed">{{ ans.failed }} failed</span>
+              {% elif ans.subs and ans.graded == ans.subs %}
+                <span class="pill pill--graded">graded</span>
+              {% elif ans.graded %}
+                <span class="pill pill--warning">{{ ans.subs - ans.graded }} ungraded</span>
+              {% else %}
+                <span class="pill pill--pending">ungraded</span>
+              {% endif %}
+            </td>
+            <td class="num">{% if ans.scored %}{{ (ans.total / ans.scored) | round(1) }}{% else %}—{% endif %}</td>
+            <td>
+              {% if ans.failed %}
+                <a class="btn btn--sm" href="{{ href }}">Retry</a>
+              {% elif ans.subs and ans.graded == ans.subs %}
+                <a class="btn btn--sm" href="{{ href }}">Review</a>
+              {% else %}
+                <a class="btn btn--primary btn--sm" href="{{ href }}">Grade</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">
+      <h3>No assignments yet</h3>
+      <p>An assignment pairs a rubric with the grading skill that reads against it.</p>
+      <button class="btn btn--primary" type="button" data-panel-toggle="new-assignment-panel">+ New assignment</button>
+    </div>
+    {% endif %}
+  </section>
+
+{#
+  "Worth a look" — course nudges (Increment 1, Feature A). Filled by
+  static/js/insight.js from the insight router; the panel hides itself when
+  that router is not mounted, so this page never depends on it.
+#}
+<section class="card nudges" id="nudges-panel" aria-label="Worth a look" hidden
+         data-api-nudges="{{ (insight_api.nudges if insight_api is defined and insight_api else none) | default('/api/courses/' ~ course.id ~ '/nudges', true) }}"
+         data-api-dismiss="{{ (insight_api.dismiss if insight_api is defined and insight_api else none) | default('/api/nudges/{id}/dismiss', true) }}">
+  <div class="card-head">
+    <h2>Worth a look</h2>
+    <span class="fine" data-nudge-count></span>
+  </div>
+  <div data-nudge-body>
+    <p class="fine">Checking for patterns across the class…</p>
+  </div>
+</section>
+  </div>
+</div>
+
+{# Names and numbers for the nudge evidence links stay client-side. #}
+<script type="application/json" id="course-context">
+{"grading_href": {{ gpat | tojson }},
+ "assignments": [{% for a in assignments %}{"id": {{ a.id }}, "name": {{ a.name | tojson }}}{{ "," if not loop.last }}{% endfor %}],
+ "students": [{% for s in students %}{"id": {{ s.id }}, "name": {{ s.name | tojson }}, "number": {{ s.student_number }}}{{ "," if not loop.last }}{% endfor %}]}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/insight.js" defer></script>
+{% endblock %}

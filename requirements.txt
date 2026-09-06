@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+sqlalchemy>=2
+jinja2
+python-multipart
+anthropic>=1,<2
+openai
+cryptography
+pypdf
+httpx
+pytest

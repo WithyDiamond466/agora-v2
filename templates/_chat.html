@@ -1,0 +1,50 @@
+{#
+  _chat.html — floating assistant, included by base.html on every page.
+
+  Behaviour lives in static/js/chat.js:
+    POST /api/chat  (override with a `chat_endpoint` context var — note that
+    `chat_api` is NOT used here: skill_detail sets it to the skill test-drive
+    endpoint for its mini chat)
+      body: {message, session_id, context: {page, course_id, assignment_id,
+             student_id, skill_id}}
+      reply: {reply|message|text, session_id, tool_calls: [{name, input}],
+              actions|action: [{type: "navigate", url|page} |
+                               {type: "confirm_grading", assignment_id, ...}]}
+  Side-effecting actions render a .chat-confirm card and only POST after an
+  explicit button press. All text is inserted with textContent (untrusted).
+#}
+{% set _chat_bits = [] %}
+{% if course is defined and course %}{% set _ = _chat_bits.append(course.name) %}{% endif %}
+{% if assignment is defined and assignment %}{% set _ = _chat_bits.append(assignment.name) %}{% endif %}
+{% if student is defined and student %}{% set _ = _chat_bits.append(student.name) %}{% endif %}
+{% if skill is defined and skill %}{% set _ = _chat_bits.append(skill.name) %}{% endif %}
+
+<button class="chat-fab" type="button" id="chat-fab"
+        aria-label="Toggle assistant" aria-expanded="false" aria-controls="chat-panel">Æ</button>
+
+<section class="chat-panel" id="chat-panel" hidden aria-label="Assistant"
+         data-chat-endpoint="{{ chat_endpoint | default('/api/chat', true) }}"
+         data-page="{{ request.url.path if request is defined and request else '/' }}"
+         {% if course is defined and course %}data-course-id="{{ course.id }}"{% endif %}
+         {% if assignment is defined and assignment %}data-assignment-id="{{ assignment.id }}"{% endif %}
+         {% if student is defined and student %}data-student-id="{{ student.id }}"{% endif %}
+         {% if skill is defined and skill %}data-skill-id="{{ skill.id }}"{% endif %}>
+  <header class="chat-head">
+    <div>
+      <div class="chat-title">Assistant</div>
+      <div class="chat-context">Context: {{ _chat_bits | join(" · ") if _chat_bits else "all courses" }}</div>
+    </div>
+    <button class="chat-close" type="button" aria-label="Close assistant">✕</button>
+  </header>
+
+  <div class="chat-log" id="chat-log">
+    <div class="msg msg--assistant">Ask about a course, a student, or an assignment. I can also open a page for you, or set up a grading run — nothing runs until you confirm it.</div>
+  </div>
+
+  <form class="chat-composer" id="chat-form">
+    <textarea id="chat-input" name="message" rows="1"
+              placeholder="Ask a question…"
+              aria-label="Message"></textarea>
+    <button class="btn btn--primary btn--sm" type="submit">Send</button>
+  </form>
+</section>

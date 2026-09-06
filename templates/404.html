@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Not found — Agora{% endblock %}
+{% block main %}
+<header class="page-head">
+  <div>
+    <h1>That page isn’t here</h1>
+    <p class="page-sub">The link may be stale, or the record was deleted.</p>
+  </div>
+</header>
+<div class="card empty">
+  <h3>Nothing at <code>{{ request.url.path if request is defined and request else "" }}</code></h3>
+  <a class="btn btn--primary" href="/">Back to your courses</a>
+</div>
+{% endblock %}

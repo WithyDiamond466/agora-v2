@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{#
+  Home. Context (app.routers.courses.page_index):
+    courses : [Course]  (with .students and .assignments loaded)
+    stats   : {courses, students, assignments, submissions, graded, pending,
+               average_percent}
+  Optional: stats.spark — up to 12 numbers for the "graded" tile sparkline.
+#}
+{% set stats = stats | default({}, true) %}
+{% set courses = courses | default([], true) %}
+{% set avg = stats.average_percent | default(none) %}
+{% block title %}Agora — Courses{% endblock %}
+
+{% block main %}
+<header class="page-head">
+  <div>
+    <h1>{{ greeting | default("Good day, Professor", true) }}</h1>
+    <p class="page-sub">
+      {% if stats.pending %}
+        {{ stats.pending }} submission{{ "" if stats.pending == 1 else "s" }} waiting to be graded.
+      {% elif stats.graded %}
+        Everything collected has been graded — {{ stats.graded }} result{{ "" if stats.graded == 1 else "s" }} on file.
+      {% else %}
+        Start by creating a course and importing its roster.
+      {% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    {% if courses %}
+      <button class="btn" type="button" data-panel-toggle="import-roster-panel">Import roster</button>
+    {% endif %}
+    <button class="btn btn--primary" type="button" data-panel-toggle="new-course-panel">+ New course</button>
+  </div>
+</header>
+
+<section class="card panel" id="new-course-panel" hidden aria-label="New course">
+  <div class="card-head"><h3>New course</h3></div>
+  <form data-api="/api/courses" data-method="POST" data-after="reload">
+    <div class="field">
+      <label for="nc-name">Course name</label>
+      <input id="nc-name" name="name" type="text" required placeholder="MA232 — Differential Equations">
+    </div>
+    <div class="field">
+      <label for="nc-term">Term</label>
+      <input id="nc-term" name="term" type="text" placeholder="Fall 2026">
+    </div>
+    <p class="form-error" data-form-error hidden></p>
+    <div class="form-foot">
+      <button class="btn" type="button" data-panel-toggle="new-course-panel">Cancel</button>
+      <button class="btn btn--primary" type="submit">Create course</button>
+    </div>
+  </form>
+</section>
+
+{% if courses %}
+<section class="card panel" id="import-roster-panel" hidden aria-label="Import roster">
+  <div class="card-head"><h3>Import a roster</h3></div>
+  <form data-api="/api/courses/{course_id}/roster/import" data-method="POST"
+        data-encoding="multipart" data-after="reload">
+    <div class="field">
+      <label for="ir-course">Course</label>
+      <select id="ir-course" name="course_id">
+        {% for c in courses %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="ir-file">Roster CSV</label>
+      <input id="ir-file" name="file" type="file" accept=".csv,text/csv" required>
+      <p class="hint">One row per student. A <code>name</code> column is required; <code>email</code> is optional.</p>
+    </div>
+    <p class="form-error" data-form-error hidden></p>
+    <div class="form-foot">
+      <button class="btn" type="button" data-panel-toggle="import-roster-panel">Cancel</button>
+      <button class="btn btn--primary" type="submit">Import</button>
+    </div>
+  </form>
+</section>
+{% endif %}
+
+<section class="stat-row" aria-label="Quick stats">
+  <div class="stat-tile">
+    <div class="stat-label">Active courses</div>
+    <div class="stat-value">{{ stats.courses | default(courses | length, true) }}</div>
+    <div class="stat-delta flat">{{ stats.students | default(0, true) }} students enrolled</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Submissions awaiting grading</div>
+    <div class="stat-value">{{ stats.pending | default(0, true) }}</div>
+    <div class="stat-delta flat">of {{ stats.submissions | default(0, true) }} collected</div>
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Graded submissions</div>
+    <div class="stat-value">{{ stats.graded | default(0, true) }}</div>
+    <div class="stat-delta flat">across {{ stats.assignments | default(0, true) }} assignments</div>
+    {% if stats.spark %}
+      <svg class="stat-spark" width="96" height="24" viewBox="0 0 96 24" aria-hidden="true"
+           data-spark="{{ stats.spark | join(',') }}"></svg>
+    {% endif %}
+  </div>
+  <div class="stat-tile">
+    <div class="stat-label">Average score, all graded work</div>
+    <div class="stat-value">{% if stats.average_percent is not none %}{{ stats.average_percent }}%{% else %}—{% endif %}</div>
+    <div class="stat-delta flat">across every course</div>
+  </div>
+</section>
+
+<h2>Courses</h2>
+
+{% if courses %}
+<div class="grid grid--auto">
+  {% for c in courses %}
+    {% set ns = namespace(subs=0, pending=0) %}
+    {% for a in c.assignments %}
+      {% set progress = assignment_progress[a.id] %}
+      {% set ns.subs = ns.subs + progress.submissions %}
+      {% set ns.pending = ns.pending + progress.ungraded %}
+    {% endfor %}
+    <a class="card course-card" href="/courses/{{ c.id }}">
+      <h3>{{ c.name }}</h3>
+      <div class="meta">{{ c.term or "No term set" }}</div>
+      <div class="counts">
+        <span><strong>{{ c.students | length }}</strong> students</span>
+        <span><strong>{{ c.assignments | length }}</strong> assignments</span>
+        {% if ns.pending %}
+          <span class="pill pill--warning">{{ ns.pending }} ungraded</span>
+        {% elif ns.subs %}
+          <span class="pill pill--graded">all graded</span>
+        {% else %}
+          <span class="pill pill--pending">no submissions</span>
+        {% endif %}
+      </div>
+    </a>
+  {% endfor %}
+  <button class="card card--new" type="button" data-panel-toggle="new-course-panel">
+    <span class="card--new-plus">+</span>
+    <span class="card--new-label">New course</span>
+    <span class="fine">A term, a roster, and the assignments you grade against it.</span>
+  </button>
+</div>
+<section class="card" aria-label="Assignments across your courses">
+  <div class="card-head">
+    <h2>Assignments</h2>
+    <span class="fine">{{ stats.assignments | default(0, true) }} across {{ courses | length }} course{{ "" if (courses | length) == 1 else "s" }}</span>
+  </div>
+  <table class="table">
+    <thead>
+      <tr><th>ASSIGNMENT</th><th>COURSE</th><th>DUE</th><th>SUBMISSIONS</th><th>STATUS</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for c in courses %}{% for a in c.assignments %}
+        {% set progress = assignment_progress[a.id] %}
+        <tr>
+          <td><a class="row-link" href="/grading/{{ a.id }}">{{ a.name }}</a></td>
+          <td class="fine">{{ c.name }}</td>
+          <td style="white-space: nowrap">{{ a.due_date.strftime("%b %d") if a.due_date else "—" }}</td>
+          <td>{{ progress.graded }} / {{ progress.submissions }}</td>
+          <td>
+            {% if progress.submissions and progress.graded == progress.submissions %}
+              <span class="pill pill--graded">graded</span>
+            {% elif progress.submissions %}
+              <span class="pill pill--warning">{{ progress.ungraded }} ungraded</span>
+            {% else %}
+              <span class="pill pill--pending">no submissions</span>
+            {% endif %}
+          </td>
+          <td><a class="btn btn--quiet btn--sm" href="/grading/{{ a.id }}">Review</a></td>
+        </tr>
+      {% endfor %}{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<div class="card empty">
+  <h3>No courses yet</h3>
+  <p>A course holds a roster, its assignments, and everything Agora learns from grading them.</p>
+  <button class="btn btn--primary" type="button" data-panel-toggle="new-course-panel">+ New course</button>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/charts.js" defer></script>
+{% endblock %}

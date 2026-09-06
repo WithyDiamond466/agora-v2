@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{#
+  Skill builder. Context (app.routers.skills page route):
+    skill          : Skill
+    docs           : [KnowledgeDoc]   (falls back to skill.knowledge_docs)
+    model_registry : {provider: {label, default, models: [{id, label, notes}]}}
+                     — app.config.load_model_registry(); falls back to the
+                     skill's own provider/model when absent
+  Optional api overrides: save, docs, doc_delete, export ("{id}" = skill id,
+  "{doc_id}" = knowledge doc id).
+#}
+{% set docs = docs | default(skill.knowledge_docs, true) | default([], true) %}
+{% set registry = model_registry | default({}, true) %}
+{% set api = api | default({}, true) %}
+{% set url_save = (api.save | default("/api/skills/{id}", true)).replace("{id}", skill.id | string) %}
+{% set url_docs = (api.docs | default("/api/skills/{id}/docs", true)).replace("{id}", skill.id | string) %}
+{% set url_doc_delete = (api.doc_delete | default("/api/skills/{id}/docs/{doc_id}", true)).replace("{id}", skill.id | string) %}
+{% set url_export = (api.export | default("/api/skills/{id}/export", true)).replace("{id}", skill.id | string) %}
+{% set ns = namespace(bytes=0) %}
+{% for d in docs %}{% set ns.bytes = ns.bytes + (d.size_bytes | default(0, true)) %}{% endfor %}
+{% block title %}{{ skill.name }} — Skills — Agora{% endblock %}
+
+{% block main %}
+<header class="page-head">
+  <div>
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/skills">Skills</a> / {{ skill.name }}</nav>
+    <h1>{{ skill.name }}</h1>
+    <p class="page-sub">A grading persona is a voice, a standard, and the course materials
+      it grades against. Everything on this page travels in the exported bundle.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="{{ url_export }}" download>Export .agoraskill</a>
+    <button class="btn btn--primary" type="submit" form="skill-form">Save changes</button>
+  </div>
+</header>
+
+<div class="split">
+  <div>
+    <section class="card">
+      <form id="skill-form" data-api="{{ url_save }}" data-method="PATCH" data-after="reload">
+        <div class="form-section form-section--first">
+          <h3>Identity</h3>
+          <p class="section-sub">Name and description are what a colleague sees when they import this skill.</p>
+          <div class="field">
+            <label for="sk-name">Skill name</label>
+            <input id="sk-name" name="name" type="text" value="{{ skill.name }}" required>
+          </div>
+          <div class="field">
+            <label for="sk-desc">Description</label>
+            <textarea id="sk-desc" name="description" rows="2">{{ skill.description or "" }}</textarea>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h3>What this skill produces</h3>
+          <p class="section-sub">Three built-in modes. Add your own under <code>data/modes/</code> or through
+            <code>POST /api/modes</code>; a custom mode travels inside the exported bundle.</p>
+          <fieldset class="privacy-modes">
+            <legend class="visually-hidden">Skill mode</legend>
+            {% for m in modes | default([], true) %}
+              <label class="mode-row">
+                <input type="radio" name="mode" value="{{ m.id }}" {{ "checked" if m.id == (skill.mode or "grade") }}>
+                <span class="mode-copy">
+                  <strong class="mode-title">{{ m.label }}{% if not m.builtin %} <span class="pill pill--pending">custom</span>{% endif %}</strong>
+                  <span class="mode-note">{{ m.description }}</span>
+                </span>
+              </label>
+            {% endfor %}
+          </fieldset>
+        </div>
+
+        <div class="form-section">
+          <h3>Model</h3>
+          <p class="section-sub">Keys live in Settings. <em>Automatic</em> grades with whatever provider has a key
+            (your preferred one first) and shifts when your access changes; pin a provider only when this skill needs it.</p>
+          <div class="field">
+            <label for="sk-provider">Provider</label>
+            <select id="sk-provider" name="provider" data-model-select="sk-model">
+              <option value="auto" {{ "selected" if skill.provider == "auto" }} data-models="auto">Automatic — whatever has a key</option>
+              {% if registry %}
+                {% for pid, entry in registry.items() %}
+                  <option value="{{ pid }}" {{ "selected" if pid == skill.provider }}
+                          data-models="{{ (entry.models | default([], true)) | map(attribute='id') | join(',') }}">
+                    {{ entry.label | default(pid, true) }}
+                  </option>
+                {% endfor %}
+              {% else %}
+                <option value="{{ skill.provider }}" selected>{{ skill.provider }}</option>
+              {% endif %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="sk-model">Model</label>
+            <select id="sk-model" name="model">
+              <option value="auto" data-provider="auto"
+                      {{ "selected" if skill.provider == "auto" or skill.model == "auto" }}
+                      {{ "hidden" if skill.provider != "auto" }}>Provider's default, chosen at grade time</option>
+              {% if registry %}
+                {% for pid, entry in registry.items() %}
+                  {% for m in entry.models | default([], true) %}
+                    <option value="{{ m.id }}" data-provider="{{ pid }}"
+                            {{ "selected" if m.id == skill.model and pid == skill.provider }}
+                            {{ "hidden" if pid != skill.provider }}>
+                      {{ m.label | default(m.id, true) }}
+                    </option>
+                  {% endfor %}
+                {% endfor %}
+              {% elif skill.provider != "auto" %}
+                <option value="{{ skill.model }}" selected>{{ skill.model }}</option>
+              {% endif %}
+            </select>
+            <p class="hint">Compare models on the same question in the test drive before pinning one. PDFs go to
+              Anthropic models natively; other providers grade from locally extracted text.</p>
+          </div>
+          <div class="field">
+            <label for="sk-maxtok">Max output tokens</label>
+            <input id="sk-maxtok" name="max_tokens" type="number" min="256" step="256"
+                   value="{{ skill.max_tokens | default(16000, true) }}">
+            <p class="hint">Caps thinking plus the written grade — leave it high enough that a
+              multi-criterion result is not cut off. No temperature setting: current Anthropic
+              models reject sampling parameters.</p>
+          </div>
+        </div>
+
+        <div class="form-section form-section--last">
+          <h3>Grading voice &amp; standards</h3>
+          <p class="section-sub">The system prompt. Write it the way you would brief a new TA.</p>
+          <div class="field">
+            <label for="sk-prompt">System prompt</label>
+            <textarea id="sk-prompt" name="system_prompt" class="prompt-editor" rows="14">{{ skill.system_prompt or "" }}</textarea>
+          </div>
+        </div>
+        <p class="form-error" data-form-error hidden></p>
+      </form>
+    </section>
+  </div>
+
+  <div class="split-col">
+    <section class="card">
+      <div class="card-head">
+        <h3 class="h3-serif">Knowledge documents</h3>
+        <span class="fine">{{ docs | length }} doc{{ "" if docs | length == 1 else "s" }}
+          · {{ (ns.bytes / 1024) | round(0) | int }} KB</span>
+      </div>
+      <p class="section-sub">Attached to every grading request. Keep these small: syllabi,
+        rubric conventions, worked examples.</p>
+      {% for d in docs %}
+        <div class="doc-row">
+          <span class="doc-icon" aria-hidden="true">▤</span>
+          <span class="doc-name">{{ d.title | default(d.filename, true) }}</span>
+          <span class="doc-meta">{{ ((d.size_bytes | default(0, true)) / 1024) | round(0) | int }} KB</span>
+          <button class="btn btn--quiet btn--sm" type="button"
+                  data-api="{{ url_doc_delete.replace('{doc_id}', d.id | string) }}"
+                  data-method="DELETE" data-after="reload"
+                  data-confirm="Remove {{ d.title | default(d.filename, true) }} from this skill?">Remove</button>
+        </div>
+      {% else %}
+        <p class="fine">No documents attached yet.</p>
+      {% endfor %}
+      <form data-api="{{ url_docs }}" data-method="POST" data-encoding="multipart" data-after="reload">
+        <div class="dropzone dropzone--compact" data-file-proxy="doc-file">
+          Drop a document, or <strong>browse</strong>
+          <span class="fine">PDF, Markdown, or plain text · sent natively, no OCR</span>
+        </div>
+        <input class="visually-hidden" id="doc-file" name="file" type="file"
+               accept=".pdf,.md,.txt,.markdown,application/pdf,text/plain,text/markdown"
+               data-autosubmit>
+        <p class="form-error" data-form-error hidden></p>
+      </form>
+    </section>
+
+    <section class="card" id="test-drive">
+      <div class="card-head">
+        <h3 class="h3-serif">Test drive</h3>
+        <span class="model-badge">{{ skill.model }}</span>
+      </div>
+      <div data-mini-chat data-skill-id="{{ skill.id }}"
+           data-chat-endpoint="{{ try_api | default(chat_api | default('/api/skills/' ~ skill.id ~ '/try', true), true) }}">
+        <div class="chat-log chat-log--mini" data-mini-log>
+          <div class="msg msg--assistant">Ask a grading question and this skill answers in its own voice. Nothing you type here is saved, and no submission is touched.</div>
+          <div class="mini-starters">
+            <p class="fine">Try one:</p>
+            <button class="btn btn--quiet btn--sm" type="button" data-mini-starter>How strictly do you mark a thesis that is defensible but never restated?</button>
+            <button class="btn btn--quiet btn--sm" type="button" data-mini-starter>What separates full marks on Use of Evidence from half marks?</button>
+            <button class="btn btn--quiet btn--sm" type="button" data-mini-starter>Write the comment you would leave on an essay that summarises instead of arguing.</button>
+          </div>
+        </div>
+        <form class="chat-composer chat-composer--mini" data-mini-form>
+          <textarea rows="1" placeholder="Try a grading question…" aria-label="Test message"></textarea>
+          <button class="btn btn--primary btn--sm" type="submit">Send</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="card" id="compare-models" data-compare-skill data-endpoint="/api/skills/{{ skill.id }}/compare">
+      <div class="card-head">
+        <h3 class="h3-serif">Compare models</h3>
+        <span class="fine">same question, side by side</span>
+      </div>
+      <p class="section-sub">There is no fixed model in Agora. Ask two models the same grading question in this
+        skill's voice and decide for yourself. Nothing here is saved.</p>
+      <form>
+        <div class="grid grid--2">
+          <div class="field">
+            <label for="cmp-a">Model A</label>
+            <select id="cmp-a" data-compare-pick></select>
+          </div>
+          <div class="field">
+            <label for="cmp-b">Model B</label>
+            <select id="cmp-b" data-compare-pick></select>
+          </div>
+        </div>
+        <div class="field field--wide">
+          <label for="cmp-q">Question</label>
+          <textarea id="cmp-q" rows="3" placeholder="Write the comment you would leave on an essay that summarises instead of arguing."></textarea>
+        </div>
+        <div class="form-foot form-foot--start">
+          <button class="btn btn--primary btn--sm" type="submit">Compare</button>
+          <span class="fine" data-compare-note role="status"></span>
+        </div>
+      </form>
+      <div class="compare-grid" data-compare-out aria-live="polite"></div>
+    </section>
+  </div>
+</div>
+
+<script type="application/json" id="candidate-json">{{ (candidates | default([], true)) | tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/compare.js" defer></script>
+{% endblock %}

@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+{#
+  Settings. Context (app.routers.settings page route) — all optional:
+    model_registry : app.config.load_model_registry()
+    credentials    : {provider: {configured: bool, masked: "sk-…abcd", label}}
+    db_path        : str
+  Optional api overrides: key_save, key_test, key_delete, models_save.
+  Nothing here ever displays a full key; keys are encrypted with
+  ~/.config/agora/secret.key and never leave the machine.
+#}
+{% set registry = model_registry | default({}, true) %}
+{% if registry is not mapping %}{% set registry = {} %}{% endif %}
+{% set creds = credentials | default(keys | default({}, true), true) %}
+{% if creds is not mapping %}{% set creds = {} %}{% endif %}
+{% set provider_ids = providers | default(registry.keys() | list if registry else ["anthropic", "openai"], true) %}
+{% set api = api | default({}, true) %}
+{% set url_key_save = api.key_save | default("/api/settings/keys", true) %}
+{% set url_key_test = api.key_test | default("/api/settings/keys/{provider}/test", true) %}
+{% set url_key_delete = api.key_delete | default("/api/settings/keys/{provider}", true) %}
+{% set url_models_save = api.models_save | default("/api/settings/models", true) %}
+{% block title %}Settings — Agora{% endblock %}
+
+{% block main %}
+<header class="page-head">
+  <div>
+    <h1>Settings</h1>
+    <p class="page-sub">Choose your AI provider, privacy settings, and local preferences.</p>
+  </div>
+</header>
+
+<div class="settings-shell">
+  <nav class="settings-index" aria-label="Settings sections">
+    <ol>
+      <li><a href="#set-api-keys">API keys</a></li>
+      <li><a href="#set-models">Models</a></li>
+      <li><a href="#privacy-settings">Privacy</a></li>
+      <li><a href="#set-local-model">Local model</a></li>
+      <li><a href="#set-appearance">Appearance</a></li>
+      <li><a href="#set-data">Data</a></li>
+    </ol>
+  </nav>
+  <div class="form-page">
+
+  <section class="card">
+    <div class="form-section form-section--first" id="set-api-keys">
+      <h3>API keys</h3>
+      <p class="section-sub">Add your provider's API key to use cloud AI. API use may be billed separately from a chat subscription.
+        Keys are encrypted locally. Privacy settings control how coursework is prepared before it is sent.</p>
+
+      {% for pid in provider_ids if pid != "local" %}
+        {% set entry = registry.get(pid, {}) %}
+        {% set cred = creds.get(pid, {}) %}
+        {% if cred is not mapping %}{% set cred = {} %}{% endif %}
+        <div class="provider-block">
+          <div class="provider-head">
+            <strong>{{ entry.label | default(pid | title, true) }}</strong>
+            {% if cred.configured %}
+              <span class="pill pill--graded">key configured</span>
+            {% else %}
+              <span class="pill pill--pending">not configured</span>
+            {% endif %}
+          </div>
+          <form data-api="{{ url_key_save }}" data-method="POST" data-after="reload">
+            <input type="hidden" name="provider" value="{{ pid }}">
+            <div class="field field--key">
+              <label for="key-{{ pid }}">API key</label>
+              <div class="key-row">
+                <input id="key-{{ pid }}" name="key" type="password" autocomplete="off"
+                       spellcheck="false"
+                       placeholder="{{ cred.masked | default('paste a key to replace the stored one', true) }}">
+                <button class="btn btn--sm" type="button" data-reveal="key-{{ pid }}"
+                        aria-pressed="false">Show</button>
+              </div>
+              <p class="hint">Stored encrypted. It is never rendered back into this page.</p>
+            </div>
+            {% if pid == "openai" and openai_login is defined and openai_login %}
+              <div class="notice notice--info openai-login" data-openai-login="{{ openai_login.state }}">
+                <strong>Log in with your OpenAI account.</strong>
+                <p>{{ openai_login.message }}
+                  {% if openai_login.state == "chatgpt" %}
+                    <a href="{{ openai_login.api_keys_url }}" target="_blank" rel="noopener">Create an API key</a>.
+                  {% endif %}</p>
+                {% if openai_login.state == "apikey" %}
+                  <button class="btn btn--sm btn--primary" type="button"
+                          data-api="/api/settings/openai-login/import" data-method="POST" data-after="reload">
+                    Use the key from my Codex login{% if openai_login.email %} ({{ openai_login.email }}){% endif %}
+                  </button>
+                {% endif %}
+              </div>
+            {% endif %}
+            <p class="form-error" data-form-error hidden></p>
+            <div class="provider-actions">
+              <button class="btn btn--primary btn--sm" type="submit">Save key</button>
+              <button class="btn btn--sm" type="button"
+                      data-api="{{ url_key_test.replace('{provider}', pid) }}"
+                      data-method="POST" data-result="#test-{{ pid }}">Test connection</button>
+              {% if cred.configured %}
+                <button class="btn btn--danger btn--sm" type="button"
+                        data-api="{{ url_key_delete.replace('{provider}', pid) }}"
+                        data-method="DELETE" data-after="reload"
+                        data-confirm="Remove the stored {{ pid }} key?">Remove key</button>
+              {% endif %}
+              <span class="fine" id="test-{{ pid }}" role="status"></span>
+            </div>
+          </form>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="form-section" id="set-models">
+      <h3>Models</h3>
+      <p class="section-sub">There is no fixed grading model. A skill set to <em>automatic</em> grades with
+        whatever you have a key for, trying your preferred provider first; a skill can also pin a
+        provider and model. Below that, the default model each provider uses when a skill does not pin one.</p>
+      <form data-api="/api/settings/preferred-provider" data-method="POST" data-after="reload">
+        <div class="field">
+          <label for="preferred-provider">Preferred provider for automatic skills</label>
+          <select id="preferred-provider" name="provider">
+            <option value="" {{ "selected" if not preferred_provider }}>No preference — first with a key ({{ (auto_order | default(["anthropic", "openai", "local"], true)) | join(", ") }})</option>
+            {% for pid, entry in registry.items() %}
+              <option value="{{ pid }}" {{ "selected" if pid == preferred_provider }}>{{ entry.label | default(pid | title, true) }}{% if creds.get(pid, {}).configured %} — key configured{% endif %}</option>
+            {% endfor %}
+          </select>
+          <p class="hint">Set automatically to the first provider you add a key for. Change it any time; skills follow it on their next grading run.</p>
+        </div>
+        <p class="form-error" data-form-error hidden></p>
+        <div class="form-foot">
+          <button class="btn btn--primary" type="submit">Save preference</button>
+        </div>
+      </form>
+      {% if registry %}
+        <form data-api="{{ url_models_save }}" data-method="POST" data-after="reload">
+          {% for pid, entry in registry.items() %}
+            <div class="field">
+              <label for="model-{{ pid }}">{{ entry.label | default(pid | title, true) }} default</label>
+              <select id="model-{{ pid }}" name="{{ pid }}">
+                {% for m in entry.models | default([], true) %}
+                  <option value="{{ m.id }}" {{ "selected" if m.id == entry.default }}>
+                    {% if m.label == "Gemma 3 4B Instruct" %}Gemma 3 4B Instruct — local, via llama.cpp{% elif m.label == "Claude Opus 5" %}Claude Opus 5 — default for grading{% elif m.label == "GPT-5.6 Sol" %}GPT-5.6 Sol — default for grading{% else %}{{ m.label | default(m.id, true) }}{% if m.notes %} — {{ m.notes }}{% endif %}{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+          {% endfor %}
+          <p class="form-error" data-form-error hidden></p>
+          <div class="form-foot">
+            <button class="btn btn--primary" type="submit">Save defaults</button>
+          </div>
+        </form>
+      {% else %}
+        <p class="fine">The model registry was not passed to this page.</p>
+      {% endif %}
+    </div>
+
+    {#
+      Privacy (Increment 1, Feature B). Mode, the pseudonym map and the local
+      model card are read/written by static/js/privacy.js — see the endpoint
+      contract at the top of that file. The explanatory copy is server-rendered
+      so the tradeoffs are readable with JavaScript off.
+    #}
+    <div class="form-section" id="privacy-settings"
+         data-api-privacy="{{ privacy_api.settings | default('/api/settings/privacy', true) if privacy_api is defined and privacy_api else '/api/settings/privacy' }}"
+         data-api-pseudonyms="{{ privacy_api.pseudonyms | default('/api/settings/privacy/pseudonyms', true) if privacy_api is defined and privacy_api else '/api/settings/privacy/pseudonyms' }}"
+         data-api-local-health="{{ privacy_api.local_model_health | default('/api/settings/local-model/health', true) if privacy_api is defined and privacy_api else '/api/settings/local-model/health' }}">
+      <h3>Privacy</h3>
+      <p class="section-sub">Grading with a cloud model is the one moment student work leaves
+        this machine. Choose what goes with it.</p>
+
+      <fieldset class="privacy-modes">
+        <legend class="visually-hidden">What happens before a cloud model reads a submission</legend>
+
+        <label class="mode-row">
+          <input type="radio" name="privacy_mode" value="swap" data-privacy-mode>
+          <span class="mode-copy">
+            <strong class="mode-title">Swap identifiers for codes
+              <span class="pill pill--graded">recommended</span></strong>
+            <span class="mode-note">Names, emails, phone numbers and ID numbers are replaced with
+              stable codes — <span class="snum">Student-07</span>, <span class="snum">Person-A</span>,
+              <span class="snum">[EMAIL-1]</span> — before the text is sent. The same person keeps
+              the same code across submissions and sessions, so you and the model can still follow
+              who is who, and the map stays here.
+              <em>The tradeoff:</em> swapping happens in text, so a PDF goes out as extracted text
+              rather than the original file — layout, tables and handwriting fidelity are lost.
+              Cloud grading stops without sending an image or a document with no extractable text.
+              Use the local model or explicitly change privacy mode to continue.</span>
+          </span>
+        </label>
+
+        <label class="mode-row">
+          <input type="radio" name="privacy_mode" value="warn" data-privacy-mode>
+          <span class="mode-copy">
+            <strong class="mode-title">Warn me, and I'll decide</strong>
+            <span class="mode-note">Agora scans each submission and shows you what it found before
+              a grading run starts. Nothing is replaced unless you say so, and the original PDF
+              still goes to the model if you send it as written.</span>
+          </span>
+        </label>
+
+        <label class="mode-row">
+          <input type="radio" name="privacy_mode" value="off" data-privacy-mode>
+          <span class="mode-copy">
+            <strong class="mode-title">Off — send submissions as they are</strong>
+            <span class="mode-note">Native PDFs go straight to the provider, names and all. Best
+              fidelity, no protection; keep it for work you know carries no identifying detail.</span>
+          </span>
+        </label>
+      </fieldset>
+      <p class="fine" data-privacy-status role="status"></p>
+
+      <label class="checkbox-row sweep-row">
+        <input type="checkbox" data-privacy-sweep>
+        Let the local model re-read the text for names the rules missed
+      </label>
+      <p class="fine" data-privacy-sweep-note></p>
+
+      <h4 class="map-title">Code book</h4>
+      <p class="fine">Every code Agora has assigned, per course. This table is stored in your local
+        database and is never sent anywhere.</p>
+      <div class="filter-row">
+        <label for="pseudonym-course">Course</label>
+        <select id="pseudonym-course" class="field-560" data-pseudonym-course></select>
+      </div>
+      <table class="table table--dense" data-pseudonym-table>
+        <thead>
+          <tr>
+            <th scope="col">Code</th>
+            <th scope="col">Stands for</th>
+            <th scope="col">Kind</th>
+            <th scope="col">Caught by</th>
+            <th scope="col">First seen</th>
+          </tr>
+        </thead>
+        <tbody data-pseudonym-body></tbody>
+      </table>
+      <p class="fine" data-pseudonym-note></p>
+    </div>
+
+    <div class="form-section" id="set-local-model">
+      <h3>Local model</h3>
+      <p class="section-sub">A small model running on this machine catches the names the roster and
+        the pattern rules miss. It can also grade on its own — pick “local” as a skill's provider.
+        Nothing it reads leaves the machine.</p>
+      <div class="local-model">
+        <div class="provider-head">
+          <strong data-local-name>gemma-3-4b-it</strong>
+          <span class="pill pill--pending" data-local-health>checking…</span>
+        </div>
+        <form data-local-form>
+          <div class="field">
+            <label for="local-base-url">Base URL</label>
+            <input id="local-base-url" name="base_url" type="text" spellcheck="false"
+                   placeholder="http://127.0.0.1:3782/v1">
+            <p class="hint">An OpenAI-compatible <code>/v1</code> endpoint — llama.cpp's server by
+              default. No API key is needed.</p>
+          </div>
+          <div class="field">
+            <label for="local-model-name">Model</label>
+            <input id="local-model-name" name="model" type="text" spellcheck="false"
+                   placeholder="gemma-3-4b-it">
+          </div>
+          <label class="checkbox-row">
+            <input type="checkbox" name="enabled" data-local-enabled>
+            Available to Agora (privacy sweep, skills, insight cards)
+          </label>
+          <p class="hint">The privacy sweep reads a submission <em>before</em> it is fully
+            pseudonymized, so the address must use this machine's loopback interface.</p>
+          <div class="provider-actions">
+            <button class="btn btn--primary btn--sm" type="submit">Save</button>
+            <button class="btn btn--sm" type="button" data-local-check>Check connection</button>
+            <span class="fine" data-local-detail role="status"></span>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="form-section" id="set-appearance">
+      <h3>Appearance</h3>
+      <p class="section-sub">Light is “reading room”, dark is “lamplight”. The choice is stored
+        in this browser only.</p>
+      <fieldset class="theme-choice">
+        <legend class="visually-hidden">Theme</legend>
+        <label class="checkbox-row"><input type="radio" name="theme" value="system" data-theme-radio> System</label>
+        <label class="checkbox-row"><input type="radio" name="theme" value="light" data-theme-radio> Light</label>
+        <label class="checkbox-row"><input type="radio" name="theme" value="dark" data-theme-radio> Dark</label>
+      </fieldset>
+    </div>
+
+    <div class="form-section form-section--last" id="set-data">
+      <h3>Data</h3>
+      <p class="section-sub">Course records live in SQLite; uploaded work and skill documents are stored alongside it. Back up the complete data folder using the backup tool.</p>
+      <div class="field">
+        <label for="db-path">Database</label>
+        <input id="db-path" type="text" readonly value="{{ db_path | default('data/agora.db', true) }}">
+      </div>
+      <div class="form-foot form-foot--start">
+        <button class="btn btn--danger" type="button"
+                data-api="/api/shutdown" data-method="POST"
+                data-confirm="Shut down Agora? The server stops and this tab goes offline."
+                data-result="#shutdown-note">Shut down Agora</button>
+        <span class="fine" id="shutdown-note" role="status"></span>
+      </div>
+    </div>
+  </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/privacy.js" defer></script>
+{% endblock %}

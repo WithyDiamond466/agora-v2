@@ -1,0 +1,487 @@
+{% extends "base.html" %}
+{#
+  Grading queue + result detail. Context (app.routers.grading page route):
+    assignment  : Assignment
+    course      : Course
+    rubric      : Rubric          (falls back to assignment.rubric)
+    submissions : [Submission]    (with .student and .grade_result loaded)
+  Optional:
+    students : [Student] for the upload mapping UI (falls back to course.students)
+    api      : {submissions, upload, grade_all, grade_one, result} endpoint
+               overrides — the defaults below are what static/js/grading.js
+               calls. "{id}" in grade_one/result is the submission id.
+
+  Row selection is a plain link (?submission=ID) so the page works without JS;
+  grading.js upgrades it to an in-page pane swap.
+#}
+{% set submissions = submissions | default([], true) %}
+{% set rubric = rubric | default(assignment.rubric if assignment else none, true) %}
+{% set skill = skill | default(assignment.skill if assignment else none, true) %}
+{% set students = students | default(course.students if course else [], true) %}
+{% set api = api | default({}, true) %}
+{% set url_list = api.submissions | default("/api/assignments/" ~ assignment.id ~ "/grading/status", true) %}
+{% set url_upload = api.upload | default("/api/assignments/" ~ assignment.id ~ "/submissions", true) %}
+{% set url_grade_all = api.grade_all | default("/api/assignments/" ~ assignment.id ~ "/grade-all", true) %}
+{% set url_grade_one = api.grade_one | default("/api/submissions/{id}/grade", true) %}
+{% set url_result = api.result | default("/api/submissions/{id}/result", true) %}
+{% set url_mapping = api.mapping | default("/api/assignments/" ~ assignment.id ~ "/submissions/mapping", true) %}
+
+{% set crit_meta = {} %}
+{% for c in (rubric.criteria if rubric else []) or [] %}
+  {% set _ = crit_meta.update({c.key: c}) %}
+{% endfor %}
+
+{% set ns = namespace(pending=0, graded=0, failed=0, selected=none, released=0, unreviewed=0, withheld=0) %}
+{% for s in submissions %}
+  {% if s.status == "failed" %}{% set ns.failed = ns.failed + 1 %}
+  {% elif s.grade_result %}{% set ns.graded = ns.graded + 1 %}
+    {% if s.grade_result.review_state == "released" %}{% set ns.released = ns.released + 1 %}
+    {% elif s.grade_result.review_state == "withheld" %}{% set ns.withheld = ns.withheld + 1 %}
+    {% elif s.grade_result.review_state == "unreviewed" %}{% set ns.unreviewed = ns.unreviewed + 1 %}{% endif %}
+  {% else %}{% set ns.pending = ns.pending + 1 %}{% endif %}
+{% endfor %}
+{% set url_release = api.release | default("/api/assignments/" ~ assignment.id ~ "/release", true) %}
+{% set url_export = api.export | default("/api/assignments/" ~ assignment.id ~ "/export", true) %}
+{% set url_seen = api.seen | default("/api/submissions/{id}/review/seen", true) %}
+{% set url_withhold = api.withhold | default("/api/submissions/{id}/review/withhold", true) %}
+{% set requested = request.query_params.get("submission") if request is defined else none %}
+{% for s in submissions %}
+  {% if requested and s.id | string == requested %}{% set ns.selected = s.id %}{% endif %}
+{% endfor %}
+{% if ns.selected is none %}
+  {% for s in submissions %}
+    {% if ns.selected is none and s.grade_result %}{% set ns.selected = s.id %}{% endif %}
+  {% endfor %}
+{% endif %}
+{% if ns.selected is none and submissions %}{% set ns.selected = submissions[0].id %}{% endif %}
+
+{% block title %}Grading — {{ assignment.name }} — Agora{% endblock %}
+
+{% block main %}
+<header class="page-head">
+  <div>
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <a href="/">Courses</a> /
+      {% if course %}<a href="/courses/{{ course.id }}">{{ course.name }}</a> / {% endif %}
+      {{ assignment.name }}
+    </nav>
+    <h1>Grading — {{ assignment.name }}</h1>
+    <p class="page-sub">
+      {% if skill %}
+        <span class="model-badge">{{ skill.name }}{% if mode is defined and mode %} · {{ mode.label }}{% endif %} · {{ "model chosen at grade time" if skill.model == "auto" else skill.model }}</span>
+      {% else %}
+        <span class="model-badge">no grading skill attached</span>
+      {% endif %}
+      {% if rubric %}
+        &nbsp;Rubric “{{ rubric.name }}” · {{ (rubric.criteria or []) | length }} criteria
+        ·&nbsp;{{ rubric.total_points | default(0, true) | round(0) | int }}&nbsp;pts
+      {% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    {% if ns.released %}
+    <a class="btn" href="{{ url_export }}?format=csv" download>Export released CSV</a>
+    {% endif %}
+    {% if ns.graded %}
+    <button class="btn {{ 'btn--primary' if not (ns.pending or ns.failed) }}" type="button" data-action="release">Release feedback{% if ns.released == ns.graded %} (all released){% endif %}</button>
+    {% endif %}
+    {% if ns.pending or ns.failed %}
+    <button class="btn" type="button" data-panel-toggle="upload-panel">Upload submissions</button>
+    <button class="btn btn--primary" type="button" data-action="grade-all">Grade {{ ns.pending + ns.failed }} pending</button>
+    {%- elif submissions %}
+    <button class="btn" type="button" data-panel-toggle="upload-panel">Upload submissions</button>
+    {%- else %}
+    <button class="btn btn--primary" type="button" data-panel-toggle="upload-panel">Upload submissions</button>
+    {% endif %}
+  </div>
+</header>
+
+<div id="grading-root"
+     data-assignment-id="{{ assignment.id }}"
+     data-api-list="{{ url_list }}"
+     data-api-upload="{{ url_upload }}"
+     data-api-grade-all="{{ url_grade_all }}"
+     data-api-grade-one="{{ url_grade_one }}"
+     data-api-result="{{ url_result }}"
+     data-api-mapping="{{ url_mapping }}"
+     data-api-release="{{ url_release }}"
+     data-api-export="{{ url_export }}"
+     data-api-seen="{{ url_seen }}"
+     data-api-approve="/api/submissions/{id}/review/approve"
+     data-api-withhold="{{ url_withhold }}">
+
+  {#
+    Privacy Guard (Increment 1, Feature B). static/js/privacy.js fills this
+    region with the current mode's banner and, in warn mode, the pre-flight
+    panel that grading.js waits on before a batch. Endpoint defaults are the
+    contract documented at the top of privacy.js; override them here.
+  #}
+  <div id="privacy-banner"
+       data-api-mode="{{ api.privacy_settings | default('/api/settings/privacy', true) }}"
+       data-api-scan="{{ api.privacy_scan | default('/api/submissions/{id}/privacy', true) }}"
+       data-api-rescan="{{ api.privacy_rescan | default('/api/submissions/{id}/privacy/scan', true) }}"
+       data-api-display="{{ api.result_display | default('/api/submissions/{id}/result/display', true) }}"></div>
+
+  {% if mode is defined and mode and mode.selective and rubric %}
+  {% set picked = assignment.ai_criteria or [] %}
+  <section class="card panel" id="selective-panel" aria-label="Criteria the AI grades">
+    <div class="card-head">
+      <h3>Criteria the AI grades</h3>
+      <span class="fine">{{ mode.label }} · unticked criteria stay yours to score in each result</span>
+    </div>
+    <form data-api="/api/assignments/{{ assignment.id }}" data-method="PATCH" data-after="reload" id="selective-form">
+      <div class="tag-list">
+        {% for c in rubric.criteria or [] %}
+          <label class="checkbox-row">
+            <input type="checkbox" name="ai_criteria" data-multi value="{{ c.key }}" {{ "checked" if (not picked) or (c.key in picked) }}>
+            {{ c.title | default(c.key, true) }} <span class="fine">({{ c.max_points | default(0, true) | round(0) | int }} pts)</span>
+          </label>
+        {% endfor %}
+      </div>
+      <p class="hint">{% if picked %}{{ picked | length }} of {{ (rubric.criteria or []) | length }} criteria go to the model.{% else %}Nothing is ticked yet, so every criterion goes to the model until you choose.{% endif %} Applies to the next grading run.</p>
+      <p class="form-error" data-form-error hidden></p>
+      <div class="form-foot form-foot--start">
+        <button class="btn btn--sm btn--primary" type="submit">Save selection</button>
+      </div>
+    </form>
+  </section>
+  {% endif %}
+
+  <div class="progress-strip" id="grading-progress" hidden>
+    <div class="progress" role="progressbar" aria-valuenow="0" aria-valuemin="0"
+         aria-valuemax="{{ submissions | length }}" aria-label="Batch grading progress">
+      <span style="width: 0%"></span>
+    </div>
+    <p class="progress-note">Starting…</p>
+  </div>
+
+  <section class="card panel" id="upload-panel" hidden aria-label="Upload submissions">
+    <div class="card-head">
+      <h3>Upload submissions</h3>
+      <p class="hint">For cloud grading with privacy protection, use PDFs with selectable text. Scans, handwriting, and images need a separately supported workflow; page layout and diagrams are not preserved by text extraction.</p>
+      <span class="fine">PDF, PNG or JPEG · sent to the model natively, no OCR</span>
+    </div>
+    <div class="dropzone" id="upload-dropzone" tabindex="0" role="button"
+         aria-label="Choose submission files">
+      Drop submission files, or <strong>browse</strong>
+      <span class="fine">Filenames are matched to students automatically — you confirm every row.</span>
+    </div>
+    <input class="visually-hidden" type="file" id="upload-input" multiple
+           accept="application/pdf,image/png,image/jpeg">
+    <div id="upload-mapping" hidden>
+      <h3 class="mapping-title">Match files to students</h3>
+      <table class="table table--dense" id="upload-mapping-table">
+        <thead>
+          <tr>
+            <th scope="col">File</th>
+            <th scope="col">Student</th>
+            <th scope="col">Match</th>
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p class="form-error" id="upload-error" hidden></p>
+      <div class="form-foot">
+        <button class="btn" type="button" data-panel-toggle="upload-panel">Cancel</button>
+        <button class="btn btn--primary" type="button" id="upload-confirm">Upload and add to queue</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="grid grid--5-7">
+
+    <section class="card card--flush" aria-label="Submission queue">
+      <div class="card-head">
+        <h2>Queue</h2>
+        <span class="fine">{{ submissions | length }} submission{{ "" if submissions | length == 1 else "s" }}
+          · {{ ns.graded }} graded{% if ns.graded %} · {{ ns.released }} released{% endif %}</span>
+      </div>
+      {% if submissions %}
+      <div class="queue" id="grading-queue">
+        {% for s in submissions %}
+          {% set st = "failed" if s.status == "failed" else ("graded" if s.grade_result else s.status) %}
+          {% set rv = s.grade_result.review_state if s.grade_result else "" %}
+          <div class="queue-row" role="button" tabindex="0"
+               data-submission-id="{{ s.id }}" data-status="{{ st }}" data-review="{{ rv }}"
+               {% if s.id == ns.selected %}aria-selected="true"{% endif %}>
+            <input type="checkbox" data-queue-check value="{{ s.id }}"
+                   aria-label="Select submission {{ s.student.anon_label if s.student else s.id }}"
+                   {{ "checked" if st in ("pending", "failed") }}>
+            <span class="snum">{% if s.student %}#{{ "%02d" | format(s.student.student_number) }}{% else %}#??{% endif %}</span>
+            <span class="q-file">
+              <a class="name" href="?submission={{ s.id }}">{{ s.student.name if s.student else "Unassigned" }}</a>
+              <span class="fname">{{ s.original_filename or s.file_path or "—" }}</span>
+            </span>
+            <span data-cell="pill">
+              {% if st == "graded" %}<span class="pill pill--{{ rv }}">{{ rv }}</span>
+              {% elif st == "grading" %}<span class="pill pill--grading">grading</span>
+              {% elif st == "failed" %}<span class="pill pill--failed">failed</span>
+              {% else %}<span class="pill pill--pending">pending</span>{% endif %}
+            </span>
+            <span class="q-score" data-cell="score">
+              {% if s.grade_result and s.grade_result.incomplete %}Incomplete
+              {% elif s.grade_result and s.grade_result.mode == "feedback" %}Feedback only
+              {% elif s.grade_result %}{{ s.grade_result.overall_score | round(1) }}<span class="max">/{{ s.grade_result.max_score | round(0) | int }}</span>
+              {% else %}—{% endif %}
+            </span>
+            <span data-cell="retry">
+              {% if st == "failed" %}<button class="q-retry" type="button" data-action="retry">Retry</button>{% endif %}
+            </span>
+          </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty">
+        <h3>Nothing uploaded yet</h3>
+        <p>Upload the submissions for this assignment and Agora will match each file to a student.</p>
+        <button class="btn btn--primary" type="button" data-panel-toggle="upload-panel">Upload submissions</button>
+      </div>
+      {% endif %}
+    </section>
+
+    <div id="grading-panes">
+      {% for s in submissions %}
+        {% set r = s.grade_result %}
+        {% set rv = r.review_state if r else "" %}
+        <section class="card result-pane" data-pane-for="{{ s.id }}" data-review="{{ rv }}"
+                 data-mode="{{ (r.mode or 'grade') if r else '' }}"
+                 aria-label="Grade result" {{ "hidden" if s.id != ns.selected }}>
+          <div class="card-head">
+            <div>
+              <h2 class="result-name">
+                {{ s.student.name if s.student else "Unassigned submission" }}
+                {% if s.student %}<span class="snum">#{{ "%02d" | format(s.student.student_number) }}</span>{% endif %}
+              </h2>
+              <span class="fine mono">
+                {{ s.original_filename or "—" }}
+                {% if r %} · {{ r.created_at.strftime("%b %d, %H:%M") if r.created_at else "" }} · {{ "demo result · not an AI assessment" if (r.model or "").startswith("mock-") else (r.model or "") }}{% endif %}
+              </span>
+              {# Privacy scan chip — privacy.js fills it, or leaves it empty. #}
+              <span class="privacy-chip-slot" data-privacy-chip="{{ s.id }}"></span>
+            </div>
+            <div class="result-score">
+              {% if r %}
+                {% if r.incomplete %}
+                <div class="score-big score-big--text">Needs scores</div>
+                {% elif (r.mode or "grade") != "feedback" and r.max_score %}
+                <div class="score-big">{{ r.overall_score | round(1) }}<span class="max">/{{ r.max_score | round(0) | int }}</span></div>
+                {% else %}
+                <div class="score-big score-big--text">feedback only</div>
+                {% endif %}
+                <span class="pill pill--{{ rv }}" data-review-pill>{{ rv }}</span>
+              {% elif s.status == "failed" %}
+                <span class="pill pill--failed">failed</span>
+              {% elif s.status == "grading" %}
+                <span class="pill pill--grading">grading</span>
+              {% else %}
+                <span class="pill pill--pending">pending</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="privacy-report" data-privacy-report="{{ s.id }}" hidden></div>
+
+          {% if not s.student %}
+            <div class="notice notice--warn">
+              <strong>No student mapped.</strong>
+              <p>This file could not be matched to anyone on the roster, so it will be
+                skipped by “Grade all”. Pick the student it belongs to:</p>
+              <div class="assign-row">
+                <label class="visually-hidden" for="assign-{{ s.id }}">Student</label>
+                <select id="assign-{{ s.id }}" data-assign-select>
+                  <option value="">— choose a student —</option>
+                  {% for st in students %}
+                    <option value="{{ st.id }}">#{{ "%02d" | format(st.student_number) }} {{ st.name }}</option>
+                  {% endfor %}
+                </select>
+                <button class="btn btn--sm" type="button" data-action="assign-student"
+                        data-submission-id="{{ s.id }}">Assign</button>
+              </div>
+            </div>
+          {% endif %}
+
+          {% if s.status == "failed" %}
+            <div class="notice notice--error">
+              <strong>Grading failed.</strong>
+              <p class="mono">{{ s.error or "No error detail was recorded." }}</p>
+              <button class="btn btn--sm" type="button" data-action="retry" data-submission-id="{{ s.id }}">Retry this submission</button>
+            </div>
+          {% endif %}
+
+          {% if r %}
+            {% if rv == "withheld" %}
+              <div class="notice notice--warn">
+                <strong>Withheld.</strong>
+                <p>You said no to this result: it will not be released or exported. Regrade it, edit it, or lift the withhold below.</p>
+              </div>
+            {% elif rv == "released" %}
+              <div class="notice notice--info">
+                <strong>Released {{ r.released_at.strftime("%b %d, %H:%M") if r.released_at else "" }}.</strong>
+                <p>This version is ready to export. Editing it clears approval and release; approve and release the revised version again.</p>
+              </div>
+            {% endif %}
+            {% set scored_mode = (r.mode or "grade") != "feedback" %}
+            {% for c in r.criteria or [] %}
+              {% set meta = crit_meta.get(c.key, {}) %}
+              {% set maxp = (c.max_points if c.max_points else meta.max_points) | default(0, true) | float %}
+              {% set has_score = c.score is not none and scored_mode %}
+              {% set pct = (100.0 * (c.score | float) / maxp) if (maxp and has_score) else 0 %}
+              <div class="crit-row {{ 'crit-row--manual' if c.manual and c.score is none }}" data-crit-key="{{ c.key }}">
+                <span class="crit-name">{{ meta.title | default(c.key | replace("_", " ") | title, true) }}
+                  {% if c.manual %}<span class="fine">· yours to score</span>{% endif %}</span>
+                {% if has_score and maxp %}
+                <span class="meter {{ 'meter--low' if pct < 60 else ('meter--warn' if pct < 70 else '') }}"
+                      role="img" aria-label="{{ c.score }} of {{ maxp | round(0) | int }}">
+                  <span style="width: {{ [[pct, 0] | max, 100] | min | round(1) }}%"></span>
+                </span>
+                <span class="crit-pts">{{ c.score }}<span class="max">/{{ maxp | round(0) | int }}</span></span>
+                {% else %}
+                <span class="meter meter--empty" aria-hidden="true"><span style="width:0"></span></span>
+                <span class="crit-pts"><span class="max">unscored</span></span>
+                {% endif %}
+                {% if c.comment %}<p class="crit-comment">{{ c.comment }}</p>{% endif %}
+              </div>
+            {% endfor %}
+            {% if r.criteria %}
+            <details class="criterion-editor">
+              <summary class="btn">{{ "Edit scores and comments" if scored_mode else "Edit criterion comments" }}</summary>
+              <div class="criterion-editor-body">
+              {% for c in r.criteria %}
+                {% set meta = crit_meta.get(c.key, {}) %}
+                {% set edit_max = c.max_points | default(meta.max_points, true) | default(0, true) %}
+                <fieldset data-criterion-edit data-crit-key="{{ c.key }}">
+                  <legend>{{ meta.title | default(c.key, true) }}</legend>
+                  {% if scored_mode %}
+                  <div class="field">
+                    <label for="score-{{ s.id }}-{{ loop.index }}">Score out of {{ edit_max }}</label>
+                    <input id="score-{{ s.id }}-{{ loop.index }}" type="number" min="0" max="{{ edit_max }}" step="any"
+                           data-crit-score data-crit-key="{{ c.key }}" value="{{ c.score if c.score is not none else '' }}"
+                           {{ 'required' if not c.manual }}>
+                  </div>
+                  {% endif %}
+                  <div class="field field--wide">
+                    <label for="comment-{{ s.id }}-{{ loop.index }}">Criterion feedback</label>
+                    <textarea id="comment-{{ s.id }}-{{ loop.index }}" rows="3" data-crit-comment>{{ c.comment or '' }}</textarea>
+                  </div>
+                </fieldset>
+              {% endfor %}
+              <div class="form-foot form-foot--start">
+                <button class="btn btn--primary" type="button" data-action="save-manual-scores"
+                        data-result-api="{{ url_result.replace('{id}', s.id | string) }}">Save rubric edits</button>
+                <span class="fine" data-manual-note role="status"></span>
+              </div>
+              </div>
+            </details>
+            {% endif %}
+
+            {% if r.misconceptions or r.strengths %}
+              <h3 class="section-gap">Misconceptions &amp; strengths</h3>
+              <p class="tag-list">
+                {% for t in r.misconceptions or [] %}<span class="tag tag--warn">{{ t }}</span>{% endfor %}
+                {% for t in r.strengths or [] %}<span class="tag tag--good">{{ t }}</span>{% endfor %}
+              </p>
+            {% endif %}
+
+            <h3>Feedback draft</h3>
+            <blockquote class="feedback-block" data-feedback-for="{{ s.id }}">{{ r.summary_feedback or "No prose feedback was generated." }}</blockquote>
+            <form class="feedback-editor" hidden
+                  data-api="{{ url_result.replace('{id}', s.id | string) }}"
+                  data-method="PATCH" data-after="reload">
+              <div class="field field--wide">
+                <label for="fb-{{ s.id }}">Feedback</label>
+                <textarea id="fb-{{ s.id }}" name="summary_feedback" rows="5">{{ r.summary_feedback or "" }}</textarea>
+              </div>
+              <p class="form-error" data-form-error hidden></p>
+              <div class="form-foot">
+                <button class="btn" type="button" data-action="cancel-feedback">Cancel</button>
+                <button class="btn btn--primary" type="submit">Save feedback</button>
+              </div>
+            </form>
+
+            <div class="form-foot">
+              <button class="btn" type="button" data-action="edit-feedback">Edit feedback</button>
+              <button class="btn" type="button" data-action="retry"
+                      data-submission-id="{{ s.id }}" data-confirm="Regrade this submission? The current result is replaced and returns to unreviewed.">Regrade</button>
+              {% if rv == "withheld" %}
+              <button class="btn" type="button" data-action="withhold" data-withheld="false" data-submission-id="{{ s.id }}">Lift withhold</button>
+              {% else %}
+              <button class="btn" type="button" data-action="withhold" data-withheld="true" data-submission-id="{{ s.id }}"
+                      data-confirm="Withhold this result? It will not be released or exported until you lift the withhold.">Withhold</button>
+              {% endif %}
+              <button class="btn" type="button" data-action="compare-models" data-submission-id="{{ s.id }}"
+                      data-label="{{ s.student.name if s.student else s.original_filename }}">Compare models</button>
+              <button class="btn btn--primary" type="button" data-action="approve-next">Approve and next</button>
+            </div>
+          {% elif s.status != "failed" %}
+            <div class="empty">
+              <h3>Not graded yet</h3>
+              <p>{{ s.original_filename or "This submission" }} is queued. Grade it on its own, or run the whole batch.</p>
+              <button class="btn btn--primary" type="button" data-action="retry" data-submission-id="{{ s.id }}">Grade this submission</button>
+            </div>
+          {% endif %}
+        </section>
+      {% endfor %}
+
+      {% if not submissions %}
+        <section class="card empty">
+          <h3>No submission selected</h3>
+          <p>Upload files to build the queue — results appear here as they come back.</p>
+        </section>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<dialog class="dialog" id="release-dialog" aria-labelledby="release-title">
+  <form method="dialog" class="dialog-body" id="release-form">
+    <h2 id="release-title">Release feedback</h2>
+    <p class="section-sub" data-release-intro>Checking what is ready…</p>
+    <ul class="release-list" data-release-list></ul>
+    <p class="fine" data-release-unseen-row hidden><strong data-release-unseen-count>0</strong> results still need approval. Open each result and choose Approve and next.</p>
+    <p class="fine" data-release-manual hidden></p>
+    <p class="notice notice--warn" data-release-terms hidden>
+      <strong>Terms not accepted.</strong> <a href="/terms">Read and accept the terms of use</a> before releasing feedback.
+    </p>
+    <p class="form-error" data-release-error hidden></p>
+    <div class="form-foot">
+      <button class="btn" type="button" data-release-cancel>Cancel</button>
+      <button class="btn btn--primary" type="button" data-release-confirm>Release</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="dialog dialog--wide" id="compare-dialog" aria-labelledby="compare-title">
+  <div class="dialog-body">
+    <h2 id="compare-title" data-compare-title>Compare models</h2>
+    <p class="section-sub" data-compare-note></p>
+    <div class="grid grid--2">
+      <div class="field">
+        <label for="cmp-sub-a">Model A</label>
+        <select id="cmp-sub-a" data-compare-pick></select>
+      </div>
+      <div class="field">
+        <label for="cmp-sub-b">Model B</label>
+        <select id="cmp-sub-b" data-compare-pick></select>
+      </div>
+    </div>
+    <div data-compare-out aria-live="polite"></div>
+    <div class="form-foot">
+      <button class="btn" type="button" data-compare-close>Close</button>
+      <button class="btn btn--primary" type="button" data-compare-run>Grade with both</button>
+    </div>
+  </div>
+</dialog>
+
+<script type="application/json" id="candidate-json">{{ (candidates | default([], true)) | tojson }}</script>
+<script type="application/json" id="roster-json">
+[{% for s in students %}{"id": {{ s.id }}, "name": {{ s.name | tojson }}, "number": {{ s.student_number }}}{{ "," if not loop.last }}{% endfor %}]
+</script>
+{% endblock %}
+
+{% block scripts %}
+{# privacy.js first: grading.js asks window.AgoraPrivacy before it starts a batch. #}
+<script src="/static/js/privacy.js" defer></script>
+<script src="/static/js/grading.js" defer></script>
+<script src="/static/js/compare.js" defer></script>
+{% endblock %}

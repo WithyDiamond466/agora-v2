@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{#
+  Terms of use. Context (app.routers.terms):
+    terms_status       : {accepted, version, accepted_at, signed_by, previous_version}
+    terms_points       : [(title, body)]
+    syllabus_statement : str
+    disclosure         : str
+#}
+{% set status = terms_status | default({}, true) %}
+{% block title %}Terms of use — Agora{% endblock %}
+
+{% block main %}
+<header class="page-head">
+  <div>
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/settings">Settings</a> / Terms of use</nav>
+    <h1>{{ terms_title }}</h1>
+    <p class="page-sub">Version {{ terms_version }}.
+      {% if status.accepted %}
+        Accepted {{ status.accepted_at[:10] if status.accepted_at else "" }}{% if status.signed_by %} by {{ status.signed_by }}{% endif %}.
+      {% elif status.previous_version %}
+        The terms changed since you accepted version {{ status.previous_version }}; please read and accept again.
+      {% else %}
+        Accept once to unlock cloud grading, release, and export.
+      {% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    {% if status.accepted %}
+      <span class="pill pill--graded">accepted</span>
+    {% else %}
+      <span class="pill pill--pending">not accepted</span>
+    {% endif %}
+  </div>
+</header>
+
+<div class="split">
+  <div>
+    <section class="card">
+      <ol class="terms-list">
+        {% for title, body in terms_points %}
+          <li>
+            <h3>{{ title }}</h3>
+            <p>{{ body }}</p>
+          </li>
+        {% endfor %}
+      </ol>
+
+      {% if not status.accepted %}
+      <form id="terms-form" data-api="/api/terms/accept" data-method="POST" data-after="redirect:/settings">
+        <div class="field">
+          <label for="terms-name">Your name (optional, recorded with the acceptance)</label>
+          <input id="terms-name" name="signed_by" type="text" autocomplete="name" placeholder="Dr. A. Professor">
+        </div>
+        <label class="checkbox-row">
+          <input type="checkbox" name="agree" value="true" required>
+          I have read these terms and I accept them.
+        </label>
+        <p class="form-error" data-form-error hidden></p>
+        <div class="form-foot">
+          <a class="btn" href="/settings">Not now</a>
+          <button class="btn btn--primary" type="submit">Accept terms v{{ terms_version }}</button>
+        </div>
+      </form>
+      {% endif %}
+    </section>
+  </div>
+
+  <div class="split-col">
+    <section class="card">
+      <div class="card-head">
+        <h3 class="h3-serif">Syllabus statement</h3>
+        <span class="fine">copy into your syllabus</span>
+      </div>
+      <p class="section-sub">Students must be told before the first assignment that AI helps with grading. This wording covers what Agora does.</p>
+      <textarea class="prompt-editor" rows="9" readonly aria-label="Syllabus statement" onclick="this.select()">{{ syllabus_statement }}</textarea>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 class="h3-serif">Disclosure line</h3>
+        <span class="fine">added to every export</span>
+      </div>
+      <p class="section-sub">Every piece of feedback Agora exports for a student ends with this sentence.</p>
+      <blockquote class="feedback-block">{{ disclosure }}</blockquote>
+    </section>
+  </div>
+</div>
+{% endblock %}

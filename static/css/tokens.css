@@ -1,0 +1,212 @@
+/* ==========================================================================
+   Agora v2 — design tokens ("Marginalia" system)
+   Two modes, one vocabulary. Light is "reading room" (warm paper, iron-gall
+   ink); dark is "lamplight" (warm near-black, cream ink). Every color the UI
+   or a chart uses is defined here as a custom property — components and
+   charts reference roles, never raw hex.
+
+   Chart palette validated with the dataviz six-checks validator against
+   --surface in each mode (see DESIGN.md § Chart color system for the
+   validator output). Do not edit chart hexes without re-running it.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* ---- Typography ------------------------------------------------------ */
+  /* Bookish serif for headings & display — offline system stack. */
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino,
+                "Book Antiqua", "URW Palladio L", P052, Georgia, serif;
+  /* Humanist sans for UI text — deliberately NOT the Inter/Roboto default. */
+  --font-sans: Seravek, "Gill Sans Nova", Ubuntu, Calibri, "DejaVu Sans",
+               source-sans-pro, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo,
+               Consolas, "DejaVu Sans Mono", monospace;
+
+  --text-xs: 0.75rem;    /* 12px — pill text, axis ticks, fine print   */
+  --text-sm: 0.8125rem;  /* 13px — dense tables, queue rows, captions  */
+  --text-md: 0.875rem;   /* 14px — UI base                             */
+  --text-lg: 1.0625rem;  /* 17px — lead paragraphs, section intros     */
+  --text-h3: 1.0625rem;  /* 17px serif or sans semibold                */
+  --text-h2: 1.3125rem;  /* 21px serif                                 */
+  --text-h1: 1.75rem;    /* 28px serif — page title                    */
+  --text-hero: 2.25rem;  /* 36px — stat-tile hero values (sans)        */
+  --leading-ui: 1.5;
+  --leading-tight: 1.25;
+
+  /* ---- Space, radius, elevation ---------------------------------------- */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 24px; --s-6: 32px; --s-7: 48px;
+  --r-s: 4px; --r-m: 8px; --r-l: 12px; --r-full: 999px;
+  --shadow-card: 0 1px 2px rgba(60, 50, 30, 0.06), 0 2px 10px rgba(60, 50, 30, 0.05);
+  --shadow-pop: 0 4px 12px rgba(45, 38, 24, 0.12), 0 12px 32px rgba(45, 38, 24, 0.10);
+
+  /* ---- Surfaces & ink (light / "reading room") -------------------------- */
+  --paper: #f7f3ea;            /* page plane                              */
+  --surface: #fdfbf5;          /* cards, tables, chart surface            */
+  --surface-sunken: #f1ebdd;   /* wells, inputs, meter tracks, code       */
+  --surface-raised: #fffdf9;   /* popovers, tooltips, chat panel          */
+  --ink: #211d16;              /* primary text        (16.2:1 on surface) */
+  --ink-2: #5f584b;            /* secondary text       (6.8:1)            */
+  --ink-3: #8b8375;            /* muted / labels       (3.6:1, large ok)  */
+  --hairline: #e6dfd0;         /* gridlines, dividers                     */
+  --rule: #d5cbb8;             /* axis baselines, stronger rules          */
+  --border: rgba(33, 29, 22, 0.14);
+  --scrim: rgba(33, 29, 22, 0.35);
+
+  /* ---- Brand accents ---------------------------------------------------- */
+  --accent: #27529b;           /* links, primary actions   (7.3:1 text)   */
+  --accent-strong: #1c3d74;    /* hover / active                          */
+  --accent-wash: rgba(50, 104, 196, 0.10);
+  --accent-contrast: #ffffff;  /* text on accent           (7.6:1)        */
+  --rust: #9c4a12;             /* editorial flourish, text-safe (6.0:1)   */
+  --rust-mark: #c4562c;        /* rust as a mark/fill                     */
+  --rust-wash: rgba(196, 86, 44, 0.10);
+  --focus-ring: 2px solid #27529b;
+
+  /* ---- Status (reserved; always icon + label, never color alone) -------- */
+  /* Mark steps are mode-invariant; text steps swap per mode.               */
+  --status-good: #0a8a3a;      --status-good-text: #106b30;
+  --status-warning: #e0a10e;   --status-warning-text: #8a6100;
+  --status-serious: #d96f2e;   --status-serious-text: #9c4a12;
+  --status-critical: #c93d3d;  --status-critical-text: #a32020;
+  --status-good-wash: rgba(10, 138, 58, 0.12);
+  --status-warning-wash: rgba(224, 161, 14, 0.14);
+  --status-serious-wash: rgba(217, 111, 46, 0.13);
+  --status-critical-wash: rgba(201, 61, 61, 0.12);
+
+  /* ---- Chart: categorical (fixed order — the order IS the CVD safety) --- */
+  --chart-1: #3268c4;  /* ink blue   */
+  --chart-2: #c4562c;  /* rust       */
+  --chart-3: #17927b;  /* verdigris  */
+  --chart-4: #b08300;  /* ochre      */
+  --chart-5: #c96a8f;  /* madder     */
+  --chart-6: #2e7d12;  /* moss       */
+  --chart-7: #5b4bb8;  /* iris       */
+  --chart-8: #c93a3a;  /* seal red   */
+  --chart-deemph: #b0a894;      /* "context" gray for emphasis charts    */
+
+  /* ---- Chart: sequential (ink-blue ramp, one hue) ----------------------- */
+  --seq-100: #dbe6f9; --seq-200: #b6cdf2; --seq-300: #8fb2ea;
+  --seq-400: #5b8ae2; --seq-500: #3268c4; --seq-600: #27529b;
+  --seq-700: #1c3d74;
+  /* Second simultaneous sequential context takes the rust hue: */
+  --seq2-100: #f4dccd; --seq2-300: #e0a37c; --seq2-500: #c4562c;
+  --seq2-700: #8a3a1c;
+
+  /* ---- Chart: diverging (blue <- neutral -> rust) ------------------------ */
+  --div-neg: #3268c4; --div-mid: #efeadf; --div-pos: #c4562c;
+
+  /* ---- Chart chrome ------------------------------------------------------ */
+  --chart-grid: var(--hairline);
+  --chart-axis: var(--rule);
+  --chart-label: var(--ink-3);
+  --chart-value: var(--ink);
+}
+
+/* ==========================================================================
+   Dark mode — "lamplight". Selected steps, not an automatic flip: every
+   chart hex below was re-stepped for the dark surface and re-validated.
+   OS preference applies unless the user pinned light; explicit pin wins.
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+
+    --paper: #191713;
+    --surface: #211e19;
+    --surface-sunken: #14120e;
+    --surface-raised: #292520;
+    --ink: #f2ede3;             /* 14.2:1 on surface                       */
+    --ink-2: #c8c0b0;           /* 9.2:1                                   */
+    --ink-3: #948c7c;           /* 5.0:1                                   */
+    --hairline: #35312a;
+    --rule: #453f34;
+    --border: rgba(242, 237, 227, 0.14);
+    --scrim: rgba(10, 8, 5, 0.55);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 10px rgba(0, 0, 0, 0.28);
+    --shadow-pop: 0 4px 12px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.40);
+
+    --accent: #8fb2ea;          /* links, 7.7:1 text on surface            */
+    --accent-strong: #b6cdf2;
+    --accent-wash: rgba(91, 138, 226, 0.16);
+    --accent-contrast: #10203c;
+    --rust: #e29a70;
+    --rust-mark: #d06a3a;
+    --rust-wash: rgba(208, 106, 58, 0.16);
+    --focus-ring: 2px solid #8fb2ea;
+
+    --status-good-text: #4cc476;
+    --status-warning-text: #ecb53a;
+    --status-serious-text: #e8905e;
+    --status-critical-text: #e57373;
+    --status-good-wash: rgba(10, 138, 58, 0.20);
+    --status-warning-wash: rgba(224, 161, 14, 0.18);
+    --status-serious-wash: rgba(217, 111, 46, 0.18);
+    --status-critical-wash: rgba(201, 61, 61, 0.20);
+
+    --chart-1: #5b8ae2; --chart-2: #d06a3a; --chart-3: #2aa88d;
+    --chart-4: #b98a10; --chart-5: #c86e94; --chart-6: #58a03a;
+    --chart-7: #8d7fe0; --chart-8: #e06565;
+    --chart-deemph: #5a5449;
+
+    /* Sequential anchor flips: near-zero recedes toward the dark surface. */
+    --seq-100: #1c3d74; --seq-200: #27529b; --seq-300: #3268c4;
+    --seq-400: #5b8ae2; --seq-500: #8fb2ea; --seq-600: #b6cdf2;
+    --seq-700: #dbe6f9;
+    --seq2-100: #8a3a1c; --seq2-300: #c4562c; --seq2-500: #d06a3a;
+    --seq2-700: #f4dccd;
+
+    --div-neg: #5b8ae2; --div-mid: #383429; --div-pos: #d06a3a;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --paper: #191713;
+  --surface: #211e19;
+  --surface-sunken: #14120e;
+  --surface-raised: #292520;
+  --ink: #f2ede3;
+  --ink-2: #c8c0b0;
+  --ink-3: #948c7c;
+  --hairline: #35312a;
+  --rule: #453f34;
+  --border: rgba(242, 237, 227, 0.14);
+  --scrim: rgba(10, 8, 5, 0.55);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 10px rgba(0, 0, 0, 0.28);
+  --shadow-pop: 0 4px 12px rgba(0, 0, 0, 0.45), 0 12px 32px rgba(0, 0, 0, 0.40);
+
+  --accent: #8fb2ea;
+  --accent-strong: #b6cdf2;
+  --accent-wash: rgba(91, 138, 226, 0.16);
+  --accent-contrast: #10203c;
+  --rust: #e29a70;
+  --rust-mark: #d06a3a;
+  --rust-wash: rgba(208, 106, 58, 0.16);
+  --focus-ring: 2px solid #8fb2ea;
+
+  --status-good-text: #4cc476;
+  --status-warning-text: #ecb53a;
+  --status-serious-text: #e8905e;
+  --status-critical-text: #e57373;
+  --status-good-wash: rgba(10, 138, 58, 0.20);
+  --status-warning-wash: rgba(224, 161, 14, 0.18);
+  --status-serious-wash: rgba(217, 111, 46, 0.18);
+  --status-critical-wash: rgba(201, 61, 61, 0.20);
+
+  --chart-1: #5b8ae2; --chart-2: #d06a3a; --chart-3: #2aa88d;
+  --chart-4: #b98a10; --chart-5: #c86e94; --chart-6: #58a03a;
+  --chart-7: #8d7fe0; --chart-8: #e06565;
+  --chart-deemph: #5a5449;
+
+  --seq-100: #1c3d74; --seq-200: #27529b; --seq-300: #3268c4;
+  --seq-400: #5b8ae2; --seq-500: #8fb2ea; --seq-600: #b6cdf2;
+  --seq-700: #dbe6f9;
+  --seq2-100: #8a3a1c; --seq2-300: #c4562c; --seq2-500: #d06a3a;
+  --seq2-700: #f4dccd;
+
+  --div-neg: #5b8ae2; --div-mid: #383429; --div-pos: #d06a3a;
+}
