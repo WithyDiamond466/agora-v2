@@ -34,3 +34,5 @@ $env:AGORA_DATA_DIR = "../agora-restored-data"
 Remove any separately configured `AGORA_DATABASE_URL` when restoring; otherwise it overrides the database inside the restored directory. Enter provider API keys again in Settings. Do not copy encryption keys between machines.
 
 Verify the roster, assignments, uploaded files, and a released export before retiring the old installation. The source course stays untouched by backup and restore. Upgrades add missing database columns on startup; make a backup before installing a new version. Legacy released results require explicit approval before they can be exported with this build.
+
+After updating, hard-refresh the Agora browser tab so it loads the new scripts and styles. Use Ctrl+Shift+R on Windows/Linux or Command+Shift+R on macOS. Restarting the server alone may leave old browser assets cached.
