@@ -12,6 +12,8 @@ September 6, 2026. Agora is a development preview for synthetic-course evaluatio
 - Browser checks covered new course creation, three-student CSV import, a new three-criterion rubric and Skill assignment, criterion edits, persistence after reload, explicit approval, and a release dialog that held back 11 unapproved results. The resulting CSV contained one approved row with disclosure. Light and dark themes were inspected at desktop and laptop widths. The shipped PDFs matched all three sample students and graded through the browser with MockProvider. Skill creation, editing, browser download, and re-import preserved the exact saved prompt. See the acceptance checklist below for remaining checks.
 - Unit tests cover privacy request contents, approval invalidation, incomplete results, CSV formula protection, invalid numeric scores, failed deletions, archive traversal, and request origin/host validation.
 
+A [supplemental Gemma check](docs/LOCAL_MODEL_CHECK.md) exercised real local inference. It exposed unreliable grading of a placeholder and unsupported chat tool execution; it does not qualify model quality. The resulting chat preference fix passed 338 offline tests.
+
 ## Remaining acceptance work
 
 - Live Anthropic and OpenAI grading, comparison, and course chat have not been run with this build. No provider key was available for the readiness pass. Fake-client tests verify request shape only.

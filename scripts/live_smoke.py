@@ -190,6 +190,7 @@ def main() -> int:
     if args.provider != "auto":
         assert chat.get("provider") == args.provider, "Chat used an unexpected provider or mock fallback"
     assert chat.get("reply") and "Open a course before" not in chat["reply"], "Chat did not use course context"
+    assert any(call.get("ok") for call in chat.get("tool_calls", [])), "Chat did not successfully execute a course tool"
     print("\nOK" + (f" — data kept at {tmp}" if args.keep else ""))
     if not args.keep:
         import shutil

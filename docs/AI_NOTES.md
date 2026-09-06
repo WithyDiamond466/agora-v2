@@ -19,3 +19,5 @@ The adapter uses the installed SDK's chat completions API with a JSON-schema res
 Provider unit tests inspect requests using fake clients. They do not establish live account access, service availability, or assessment quality. `scripts/live_smoke.py --provider mock --compare` verifies the application flow without a paid request. A real-provider run uses synthetic work and requires separately configured API credentials.
 
 Cloud swap mode protects the assembled grading prompt, assignment header, extracted submission text, reference text, course chat, Skill trials/comparisons, and student-card content. Generic Skill trials use temporary identifier codes across known rosters. Images and PDFs without extracted text cannot be sent through the protected text path. Identifier detection can miss context; never describe it as guaranteed anonymity.
+
+See the [supplemental local-model check](LOCAL_MODEL_CHECK.md) for real Gemma evidence, limitations, and the isolated-endpoint smoke command. Chat acceptance now requires an executed course tool and the expected provider; text resembling a tool call does not count.
