@@ -25,8 +25,7 @@
   <div>
     <nav class="crumbs" aria-label="Breadcrumb"><a href="/skills">Skills</a> / {{ skill.name }}</nav>
     <h1>{{ skill.name }}</h1>
-    <p class="page-sub">A grading persona is a voice, a standard, and the course materials
-      it grades against. Everything on this page travels in the exported bundle.</p>
+    <p class="page-sub">Configure grading instructions and reference documents. Review them for student information before exporting a bundle.</p>
   </div>
   <div class="page-actions">
     <a class="btn" href="{{ url_export }}" download>Export .agoraskill</a>
@@ -53,8 +52,7 @@
 
         <div class="form-section">
           <h3>What this skill produces</h3>
-          <p class="section-sub">Three built-in modes. Add your own under <code>data/modes/</code> or through
-            <code>POST /api/modes</code>; a custom mode travels inside the exported bundle.</p>
+          <p class="section-sub">Choose scores and feedback, feedback only, or selective grading with some scores left for you. Imported Skills may provide additional modes.</p>
           <fieldset class="privacy-modes">
             <legend class="visually-hidden">Skill mode</legend>
             {% for m in modes | default([], true) %}
@@ -109,16 +107,13 @@
                 <option value="{{ skill.model }}" selected>{{ skill.model }}</option>
               {% endif %}
             </select>
-            <p class="hint">Compare models on the same question in the test drive before pinning one. PDFs go to
-              Anthropic models natively; other providers grade from locally extracted text.</p>
+            <p class="hint">Compare models on the same question before choosing one. Default cloud privacy mode sends extracted text and does not preserve PDF layout or diagrams.</p>
           </div>
           <div class="field">
             <label for="sk-maxtok">Max output tokens</label>
-            <input id="sk-maxtok" name="max_tokens" type="number" min="256" step="256"
+            <input id="sk-maxtok" name="max_tokens" type="number" min="256" step="1"
                    value="{{ skill.max_tokens | default(16000, true) }}">
-            <p class="hint">Caps thinking plus the written grade — leave it high enough that a
-              multi-criterion result is not cut off. No temperature setting: current Anthropic
-              models reject sampling parameters.</p>
+            <p class="hint">Limits the response length, including reasoning for models that use it. A limit that is too low can cut off the grade. Larger limits may increase cost.</p>
           </div>
         </div>
 

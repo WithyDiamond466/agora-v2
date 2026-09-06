@@ -168,3 +168,19 @@ def test_setup_rejects_changes_to_graded_assignment(client, db):
     assert response.status_code == 409
     db.expire_all()
     assert a.rubric_id == old_rubric
+
+
+def test_default_skill_output_limit_is_valid_in_browser(client, db):
+    from html.parser import HTMLParser
+    skill = Skill(name="Fresh skill", system_prompt="", provider="auto", model="auto", max_tokens=16000)
+    db.add(skill); db.commit()
+    html = client.get(f"/skills/{skill.id}").text
+    class Fields(HTMLParser):
+        attrs = None
+        def handle_starttag(self, tag, attrs):
+            values = dict(attrs)
+            if values.get("id") == "sk-maxtok": self.attrs = values
+    parser = Fields(); parser.feed(html)
+    attrs = parser.attrs
+    assert attrs is not None
+    assert (int(attrs["value"]) - int(attrs.get("min", 0))) % int(attrs.get("step", 1)) == 0
