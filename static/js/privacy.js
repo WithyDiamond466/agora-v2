@@ -368,13 +368,13 @@
     var BANNER = {
       swap: {
         cls: "notice notice--info",
-        title: "Identifiers are swapped before anything leaves this machine.",
-        body: "Names, emails, phone numbers and id numbers become stable codes — " +
+        title: "Detected identifiers are swapped before cloud requests.",
+        body: "Detected names, emails, phone numbers and id numbers become stable codes — " +
           "Student-07, Person-A, [EMAIL-1] — and the same person keeps the same code, so you " +
           "and the model can still follow who is who. Swapping happens in text, so a PDF goes " +
           "out as locally extracted text rather than the original file: layout and handwriting " +
           "fidelity are lost. Cloud grading stops without sending an image or a document with no " +
-          "extractable text. Use the local model or explicitly change privacy mode to continue."
+          "extractable text. Detection can miss identifying details; review the scan before using coursework."
       },
       warn: {
         cls: "notice notice--warn",

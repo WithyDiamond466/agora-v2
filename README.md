@@ -27,7 +27,7 @@ The launcher installs dependencies on first use and opens `http://127.0.0.1:8811
 ## Grade a course
 
 1. Create a course and import a CSV roster.
-2. Create a rubric and a Skill, then attach both to an assignment.
+2. Create a Skill, then create and open an assignment. In Assignment setup, select the Skill and create a rubric or choose an existing one.
 3. Upload submissions and check each student mapping. Configure a provider in Settings and accept the application's terms before cloud grading.
 4. Grade the submissions. Open each result, correct criterion scores or comments, save, and choose **Approve and next**.
 5. Release approved results, then export CSV feedback. Every exported row includes an AI disclosure.

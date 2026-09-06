@@ -4,11 +4,12 @@ September 6, 2026. Agora is a development preview for synthetic-course evaluatio
 
 ## Completed evidence
 
+- GitHub Actions passed on Windows, macOS, and Linux at commit `73020b8`; the final setup addition is covered by the subsequent run.
 - Fresh Python 3.12 environment on Linux installed the constrained dependencies and passed `pip check`.
-- The offline suite passed 334 tests, with 4 optional local-model tests excluded. Final published CI results are available in the repository Actions tab.
+- The offline suite passed 336 tests, with 4 optional local-model tests excluded. Final published CI results are available in the repository Actions tab.
 - The mock workflow exercised course/roster/rubric/Skill creation, uploads and mapping, grading, feedback edits, approval, release, one-row disclosed CSV export, comparison, and course-context chat.
 - A full synthetic demo backup restored into a new directory with 1 course, 12 students, 2 assignments, 24 submissions, 24 grades, and all file references valid. API credentials were excluded and the source stayed intact.
-- Browser checks covered criterion edits, persistence after reload, explicit approval, and a release dialog that held back 11 unapproved results. See the acceptance checklist below for remaining checks.
+- Browser checks covered new course creation, three-student CSV import, a new three-criterion rubric and Skill assignment, criterion edits, persistence after reload, explicit approval, and a release dialog that held back 11 unapproved results. The resulting CSV contained one approved row with disclosure. Light and dark themes were inspected at desktop and laptop widths. See the acceptance checklist below for remaining checks.
 - Unit tests cover privacy request contents, approval invalidation, incomplete results, CSV formula protection, invalid numeric scores, failed deletions, archive traversal, and request origin/host validation.
 
 ## Remaining acceptance work

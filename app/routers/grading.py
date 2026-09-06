@@ -93,6 +93,19 @@ class RubricUpdate(BaseModel):
     criteria: Optional[list[dict[str, Any]]] = None
 
 
+class SetupCriterion(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=10000)
+    max_points: float = Field(gt=0, allow_inf_nan=False)
+
+
+class AssignmentSetup(BaseModel):
+    skill_id: int
+    rubric_id: Optional[int] = None
+    rubric_name: str = Field(default="", max_length=200)
+    criteria: list[SetupCriterion] = Field(default_factory=list, max_length=100)
+
+
 class AssignmentIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: Optional[str] = None
@@ -571,6 +584,32 @@ def update_assignment(
         if db.get(Rubric, payload.rubric_id) is None:
             raise HTTPException(status_code=400, detail=f"Rubric {payload.rubric_id} not found")
         assignment.rubric_id = payload.rubric_id
+    db.commit()
+    db.refresh(assignment)
+    return assignment_dict(assignment)
+
+
+@router.post("/api/assignments/{assignment_id}/setup")
+def setup_assignment(assignment_id: int, payload: AssignmentSetup, db: Session = Depends(get_db)) -> dict[str, Any]:
+    assignment = _get_assignment(db, assignment_id)
+    if any(sub.grade_result is not None or sub.status == STATUS_GRADING for sub in assignment.submissions):
+        raise HTTPException(status_code=409, detail="This assignment already has grading work. Create a new assignment to use a different rubric or Skill.")
+    if db.get(Skill, payload.skill_id) is None:
+        raise HTTPException(status_code=400, detail="Choose an available Skill first.")
+    if payload.rubric_id is not None:
+        rubric = db.get(Rubric, payload.rubric_id)
+        if rubric is None or not rubric.criteria:
+            raise HTTPException(status_code=400, detail="Choose a rubric with at least one criterion.")
+    else:
+        if not payload.rubric_name.strip() or not payload.criteria or any(not c.title.strip() for c in payload.criteria):
+            raise HTTPException(status_code=400, detail="Name the rubric and add at least one named criterion.")
+        criteria = [{"key": f"criterion_{i}", "title": c.title.strip(), "description": c.description.strip(), "max_points": c.max_points} for i, c in enumerate(payload.criteria, 1)]
+        rubric = Rubric(name=payload.rubric_name.strip(), criteria=criteria)
+        db.add(rubric)
+        db.flush()
+    assignment.rubric_id = rubric.id
+    assignment.skill_id = payload.skill_id
+    assignment.ai_criteria = None
     db.commit()
     db.refresh(assignment)
     return assignment_dict(assignment)
@@ -1252,6 +1291,9 @@ def page_grading(assignment_id: int, request: Request, db: Session = Depends(get
             "skill": skill,
             "mode": mode,
             "candidates": candidate_options(db),
+            "available_skills": db.scalars(select(Skill).order_by(Skill.name)).all(),
+            "available_rubrics": db.scalars(select(Rubric).order_by(Rubric.name)).all(),
+            "setup_locked": any(sub.grade_result is not None or sub.status == STATUS_GRADING for sub in submissions),
             "submissions": submissions,
             "students": students,
             "counts": _status_counts(db, assignment_id),

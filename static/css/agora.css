@@ -594,3 +594,8 @@ body:has(#test-drive) .chat-fab { display: none; }
 .criterion-editor input[type="number"] { max-width: 10rem; }
 
 .pill--approved { background: var(--surface); color: var(--ink); border: 1px solid currentColor; }
+
+.assignment-setup { margin-bottom: 1.5rem; }
+.assignment-setup > summary { cursor: pointer; font-weight: 600; }
+.assignment-setup form { margin-top: 1rem; max-width: 48rem; }
+.setup-criterion { padding: 1rem; margin: 1rem 0; border: 1px solid var(--border); border-radius: 8px; }

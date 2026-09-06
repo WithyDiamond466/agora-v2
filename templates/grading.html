@@ -87,7 +87,7 @@
     {% endif %}
     {% if ns.pending or ns.failed %}
     <button class="btn" type="button" data-panel-toggle="upload-panel">Upload submissions</button>
-    <button class="btn btn--primary" type="button" data-action="grade-all">Grade {{ ns.pending + ns.failed }} pending</button>
+    <button class="btn btn--primary" type="button" data-action="grade-all" {% if not rubric or not skill %}disabled title="Save assignment setup first"{% endif %}>Grade {{ ns.pending + ns.failed }} pending</button>
     {%- elif submissions %}
     <button class="btn" type="button" data-panel-toggle="upload-panel">Upload submissions</button>
     {%- else %}
@@ -95,6 +95,44 @@
     {% endif %}
   </div>
 </header>
+
+<details class="card assignment-setup" {% if not rubric or not skill %}open{% endif %}>
+  <summary>Assignment setup{% if not rubric or not skill %} · choose a rubric and Skill{% endif %}</summary>
+  {% if setup_locked | default(false) %}
+  <p class="hint">This assignment has grading work. Create a new assignment to use a different rubric or Skill. You can correct existing results below.</p>
+  {% else %}
+  <form id="assignment-setup" data-setup-url="/api/assignments/{{ assignment.id }}/setup">
+    <div class="field">
+      <label for="setup-skill">Grading Skill</label>
+      <select id="setup-skill" required>
+        <option value="">Choose a Skill</option>
+        {% for choice in available_skills | default([]) %}
+        <option value="{{ choice.id }}" {% if assignment.skill_id == choice.id %}selected{% endif %}>{{ choice.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="hint"><a href="/skills">Create or import a Skill</a>, then return to this assignment.</p>
+    </div>
+    <div class="field">
+      <label for="setup-rubric">Rubric</label>
+      <select id="setup-rubric">
+        <option value="new">Create a new rubric</option>
+        {% for choice in available_rubrics | default([]) %}
+        {% if choice.criteria %}<option value="{{ choice.id }}" {% if assignment.rubric_id == choice.id %}selected{% endif %}>{{ choice.name }} · {{ choice.total_points }} points</option>{% endif %}
+        {% endfor %}
+      </select>
+    </div>
+    <fieldset id="setup-new-rubric" {% if rubric %}hidden disabled{% endif %}>
+      <legend>New rubric</legend>
+      <div class="field"><label for="setup-rubric-name">Rubric name</label><input id="setup-rubric-name" required maxlength="200"></div>
+      <div id="setup-criteria"></div>
+      <button type="button" class="btn" id="setup-add-criterion">Add criterion</button>
+    </fieldset>
+    <p class="hint">Save setup before grading. The rubric can be reused on other assignments.</p>
+    <p class="form-error" id="setup-error" role="alert" hidden></p>
+    <div class="form-foot form-foot--start"><button type="submit" class="btn btn--primary">Save assignment setup</button></div>
+  </form>
+  {% endif %}
+</details>
 
 <div id="grading-root"
      data-assignment-id="{{ assignment.id }}"
@@ -159,7 +197,7 @@
     <div class="card-head">
       <h3>Upload submissions</h3>
       <p class="hint">For cloud grading with privacy protection, use PDFs with selectable text. Scans, handwriting, and images need a separately supported workflow; page layout and diagrams are not preserved by text extraction.</p>
-      <span class="fine">PDF, PNG or JPEG · sent to the model natively, no OCR</span>
+      <span class="fine">PDF, PNG or JPEG · support depends on provider and privacy mode</span>
     </div>
     <div class="dropzone" id="upload-dropzone" tabindex="0" role="button"
          aria-label="Choose submission files">
@@ -483,5 +521,6 @@
 {# privacy.js first: grading.js asks window.AgoraPrivacy before it starts a batch. #}
 <script src="/static/js/privacy.js" defer></script>
 <script src="/static/js/grading.js" defer></script>
+<script src="/static/js/assignment-setup.js" defer></script>
 <script src="/static/js/compare.js" defer></script>
 {% endblock %}

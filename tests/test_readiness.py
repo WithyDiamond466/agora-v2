@@ -133,3 +133,38 @@ def test_legacy_scores_without_maxima_use_the_assignment_rubric(client, db):
     assert resp['result']['overall_score'] == 15
     assert resp['result']['max_score'] == 20
     assert 'Score out of 10' in client.get(f'/grading/{a.id}').text
+
+
+def test_fresh_assignment_can_be_configured_from_browser(client, db):
+    from app.models import Assignment, Course
+    course = Course(name="Synthetic setup", term="Fall 2026")
+    skill = Skill(name="Synthetic skill", system_prompt="Assess evidence", provider="mock", model="mock-grader-1")
+    db.add_all([course, skill]); db.commit()
+    a = Assignment(course_id=course.id, name="First essay")
+    db.add(a); db.commit()
+    html = client.get(f"/grading/{a.id}").text
+    assert 'id="assignment-setup"' in html
+    assert 'Synthetic skill' in html
+    response = client.post(f"/api/assignments/{a.id}/setup", json={
+        "skill_id": skill.id, "rubric_name": "Evidence rubric",
+        "criteria": [{"title": "Claim", "description": "State a position", "max_points": 10},
+                     {"title": "Evidence", "description": "Support the position", "max_points": 5}]
+    })
+    assert response.status_code == 200
+    db.expire_all()
+    assert a.skill_id == skill.id
+    rubric = db.get(Rubric, a.rubric_id)
+    assert rubric.total_points == 15
+    assert [c["title"] for c in rubric.criteria] == ["Claim", "Evidence"]
+
+
+def test_setup_rejects_changes_to_graded_assignment(client, db):
+    a, subs = _graded_assignment(db, n=1)
+    old_rubric = a.rubric_id
+    response = client.post(f"/api/assignments/{a.id}/setup", json={
+        "skill_id": a.skill_id, "rubric_name": "Replacement",
+        "criteria": [{"title": "Different", "max_points": 10}]
+    })
+    assert response.status_code == 409
+    db.expire_all()
+    assert a.rubric_id == old_rubric

@@ -63,7 +63,7 @@ Stop Agora with Ctrl+C in its terminal or Quit in Settings. Closing a browser ta
 
 ## Try a synthetic course
 
-Create a course and import [sample-roster.csv](../examples/sample-roster.csv). Use the [sample rubric and essays](../examples/README.md) to create a rubric, Skill, and assignment, then upload the sample PDFs. Map it to a synthetic student before grading.
+Create a course and import [sample-roster.csv](../examples/sample-roster.csv). Follow the [sample rubric and essays](../examples/README.md). Create a Skill and an assignment, open the assignment, then use **Assignment setup** to select the Skill and create or select a rubric. Save setup and upload the sample PDFs. Map it to a synthetic student before grading.
 
 Cloud grading needs an available provider configured in Settings and accepted terms. Provider use may cost money. Default cloud privacy mode rejects images and scanned PDFs without selectable text. Extracted text does not preserve diagrams or layout. Do not disable privacy protection as a workaround for unsupported coursework.
 
